@@ -345,16 +345,20 @@ private fun PlanResult(plan: TripPlan) {
             BasicText(formatMeters(plan.meters), style = Ink.meta)
         }
         plan.steps.forEach { step ->
-            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.Top) {
                 Glyph(if (step.mode == "transit") Glyphs.stepRide else Glyphs.stepWalk, null, Ink.black, 18.dp)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    BasicText(step.title, style = Ink.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    if (step.detail.isNotBlank()) BasicText(step.detail, style = Ink.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicText(step.title, style = Ink.body)
+                    if (step.detail.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        BasicText(step.detail, style = Ink.meta)
+                    }
                 }
+                Spacer(Modifier.width(8.dp))
                 BasicText(stringResource(R.string.minutes_n, step.minutes), style = Ink.small)
             }
-            Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+            Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
         }
     }
 }

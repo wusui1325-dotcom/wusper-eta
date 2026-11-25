@@ -224,6 +224,43 @@ private fun decodeChunk(encoded: String, start: Int): Pair<Int, Int>? {
     return null
 }
 
+fun parseStopSeq(raw: String?, fallback: Int): Int {
+    val n = raw?.trim()?.toIntOrNull()
+    return if (n == null || n <= 0) fallback else n
+}
+
+fun <T> List<T>.inStopOrder(seq: (T) -> Int): List<T> =
+    withIndex()
+        .sortedWith(compareBy({ seq(it.value) }, { it.index }))
+        .map { it.value }
+
+private val exitOnly = Regex("""(?i)^(出口|exit)\s*[A-Za-z]{0,2}\d?$|^[A-Za-z]{1,2}\d?\s*(出口|exit)?$""")
+
+fun exitLabel(raw: String): Boolean = exitOnly.matches(raw.trim())
+
+fun fallbackPlanTitle(transit: Boolean, route: String, towards: String): String {
+    val line = route.trim()
+    val dest = towards.trim()
+    if (!transit) return "步行"
+    if (line.isNotBlank() && dest.isNotBlank() && !exitLabel(dest)) return "$line 往 $dest"
+    if (line.isNotBlank()) return line
+    if (dest.isNotBlank() && !exitLabel(dest)) return dest
+    return "乘車"
+}
+
+fun planCopy(lines: List<String>, transit: Boolean, route: String, towards: String): Pair<String, String> {
+    val spoken = lines.map { it.trim() }.filter { it.isNotBlank() }
+    if (spoken.isEmpty()) return fallbackPlanTitle(transit, route, towards) to ""
+    val body = spoken.joinToString("\n")
+    val extra = buildList {
+        val line = route.trim()
+        val dest = towards.trim()
+        if (transit && line.isNotBlank() && !body.contains(line)) add(line)
+        if (dest.isNotBlank() && !exitLabel(dest) && !body.contains(dest)) add("往 $dest")
+    }
+    return spoken.first() to (spoken.drop(1) + extra).joinToString("\n")
+}
+
 fun nearestStop(stops: List<DetailStop>, lat: Double, lng: Double): DetailStop? {
     val placed = stops.filter { it.lat != 0.0 && it.lng != 0.0 }
     if (placed.isEmpty()) return null

@@ -16,7 +16,12 @@ import com.wusper.eta.data.matchesStopName
 import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.mtrLineOrder
+import com.wusper.eta.data.exitLabel
+import com.wusper.eta.data.fallbackPlanTitle
+import com.wusper.eta.data.inStopOrder
 import com.wusper.eta.data.nearestStop
+import com.wusper.eta.data.parseStopSeq
+import com.wusper.eta.data.planCopy
 import com.wusper.eta.data.usefulMtrSide
 import com.wusper.eta.data.oppositeDir
 import com.wusper.eta.data.otherBound
@@ -139,6 +144,34 @@ class LogicTest {
         assertTrue(haversineMeters(22.2819, 114.1580, hit!!.lat, hit.lng) < haversineMeters(22.2819, 114.1580, far.lat, far.lng))
         val first = nearestStop(listOf(near, far), 0.0, 0.0)
         assertEquals("far", first?.id)
+    }
+
+    @Test
+    fun stopListFollowsNumericSequence() {
+        val apiOrder = listOf("1", "10", "11", "12", "13", "14", "2", "3", "4", "5", "6", "7", "8", "9")
+        val ordered = apiOrder
+            .mapIndexed { index, raw -> parseStopSeq(raw, index + 1) to raw }
+            .inStopOrder { it.first }
+            .map { it.first }
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), ordered)
+    }
+
+    @Test
+    fun planKeepsGoogleWordingAndExitLetters() {
+        val spoken = planCopy(
+            listOf("乘坐港鐵東鐵綫往羅湖方向", "在大埔墟站下車", "從出口 F 離開"),
+            transit = true,
+            route = "東鐵綫",
+            towards = "F",
+        )
+        assertEquals("乘坐港鐵東鐵綫往羅湖方向", spoken.first)
+        assertEquals("在大埔墟站下車\n從出口 F 離開", spoken.second)
+        assertFalse(spoken.second.contains("往 F"))
+        assertTrue(exitLabel("出口 F"))
+        assertTrue(exitLabel("F"))
+        assertFalse(exitLabel("羅湖"))
+        assertEquals("東鐵綫 往 羅湖", fallbackPlanTitle(true, "東鐵綫", "羅湖"))
+        assertEquals("東鐵綫", fallbackPlanTitle(true, "東鐵綫", "出口 F"))
     }
 
     @Test

@@ -176,11 +176,11 @@ class TransitApi {
                         name = s.str("name_tc").ifBlank { id },
                         lat = s.dbl("lat"),
                         lng = s.dbl("lng"),
-                        seq = s.optInt("seq", i + 1),
+                        seq = readSeq(s, i + 1),
                     ),
                 )
             }
-        }
+        }.inStopOrder { it.seq }
     }
 
     suspend fun live(route: Route): List<EtaSlot> = withContext(Dispatchers.IO) {
@@ -418,21 +418,64 @@ class TransitApi {
             val arr = root.optJSONArray("steps") ?: JSONArray()
             for (i in 0 until arr.length()) {
                 val step = arr.optJSONObject(i) ?: continue
-                val type = step.optString("type")
-                val instruction = step.optString("instruction")
+                val ride = step.optString("type") == "transit"
                 val route = step.optString("route")
                 val towards = step.optString("towards")
                 val stepMin = (step.optDouble("duration_s", 0.0) / 60.0).toInt().coerceAtLeast(0)
-                val ride = type == "transit"
-                val title = if (ride && route.isNotBlank()) {
-                    if (towards.isNotBlank()) "$route 往 $towards" else route
-                } else {
-                    instruction.ifBlank { if (ride) "乘車" else "步行" }
-                }
-                add(PlanStep(if (ride) "transit" else "walk", title, if (ride) instruction else "", stepMin))
+                val (title, detail) = planCopy(spokenLines(step), ride, route, towards)
+                add(PlanStep(if (ride) "transit" else "walk", title, detail, stepMin))
             }
         }
         TripPlan(false, minutes, meters, steps, "")
+    }
+
+    private fun readSeq(row: JSONObject, fallback: Int): Int {
+        if (!row.has("seq") || row.isNull("seq")) return fallback
+        val raw = row.opt("seq")
+        val text = when (raw) {
+            is Number -> raw.toInt().toString()
+            else -> raw?.toString().orEmpty()
+        }
+        return parseStopSeq(text, fallback)
+    }
+
+    private fun spokenLines(step: JSONObject): List<String> {
+        val lines = ArrayList<String>()
+        fun add(raw: String?) {
+            plainGoogle(raw).lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
+                if (lines.none { it == line }) lines.add(line)
+            }
+        }
+        add(step.optString("instruction"))
+        for (key in listOf("lines", "details", "instructions", "sub_instructions", "substeps")) {
+            when (val value = if (step.has(key)) step.opt(key) else null) {
+                is String -> add(value)
+                is JSONArray -> {
+                    for (i in 0 until value.length()) {
+                        when (val item = value.opt(i)) {
+                            is String -> add(item)
+                            is JSONObject -> {
+                                add(item.optString("instruction"))
+                                add(item.optString("text"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return lines
+    }
+
+    private fun plainGoogle(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        return raw
+            .replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("<[^>]+>"), "")
+            .replace("&nbsp;", " ")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .trim()
     }
 
     private fun endpoint(place: Place): JSONObject {

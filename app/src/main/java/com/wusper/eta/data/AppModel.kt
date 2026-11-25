@@ -415,7 +415,7 @@ class AppModel(initial: Snapshot) {
             emptyList()
         }
         if (token != detailToken) return
-        detailStops = stops.map { DetailStop(it.id, it.name, it.lat, it.lng, it.seq) }
+        detailStops = stops.map { DetailStop(it.id, it.name, it.lat, it.lng, it.seq) }.inStopOrder { it.seq }
         detailReady = true
         val gate = Semaphore(6)
         coroutineScope {
@@ -442,7 +442,7 @@ class AppModel(initial: Snapshot) {
         val stations = idx.onLine(focus.code)
         detailStops = stations.mapIndexed { i, station ->
             DetailStop(station.sta, station.name, station.lat, station.lng, i + 1)
-        }
+        }.inStopOrder { it.seq }
         detailReady = true
         val gate = Semaphore(6)
         coroutineScope {
