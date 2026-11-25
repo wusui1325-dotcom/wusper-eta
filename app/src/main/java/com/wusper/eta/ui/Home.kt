@@ -5,7 +5,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -185,7 +184,8 @@ private fun mtrArrivals(
 }
 
 private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String, String>): Arrival {
-    val side = sides["$sta|${line.code}"] ?: com.wusper.eta.data.preferredMtrSide(line.up, line.down)
+    val preferred = com.wusper.eta.data.preferredMtrSide(line.up, line.down)
+    val side = sides["$sta|${line.code}"] ?: com.wusper.eta.data.usefulMtrSide(line.code, sta, preferred)
     val trains = if (side == "down") line.down else line.up
     val waiting = line.up.isEmpty() && line.down.isEmpty()
     return Arrival(

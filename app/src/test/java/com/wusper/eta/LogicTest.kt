@@ -11,7 +11,9 @@ import com.wusper.eta.data.isScheduledRemark
 import com.wusper.eta.data.matchesRouteQuery
 import com.wusper.eta.data.matchesStopName
 import com.wusper.eta.data.minutesUntil
+import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.mtrLineOrder
+import com.wusper.eta.data.usefulMtrSide
 import com.wusper.eta.data.oppositeDir
 import com.wusper.eta.data.otherBound
 import com.wusper.eta.data.preferredMtrSide
@@ -91,6 +93,16 @@ class LogicTest {
         assertEquals("2", oppositeDir("1"))
         assertEquals("堅尼地城", citybusOppositeDest("O", "跑馬地 (上)", "堅尼地城", "跑馬地 (上)"))
         assertEquals("down", preferredMtrSide(listOf(MtrTrain(6, "柴灣", false, "1")), listOf(MtrTrain(1, "堅尼地城", false, "2"))))
+    }
+
+    @Test
+    fun destinationTerminusMatchesTheBoundName() {
+        assertTrue(atDestinationTerminus("堅尼地城巴士總站", "堅尼地城"))
+        assertTrue(atDestinationTerminus("中環(港澳碼頭)", "中環(港澳碼頭)"))
+        assertFalse(atDestinationTerminus("置地廣場", "堅尼地城"))
+        assertEquals("down", usefulMtrSide("ISL", "CHW", "up"))
+        assertEquals("up", usefulMtrSide("ISL", "KET", "down"))
+        assertEquals("up", usefulMtrSide("ISL", "CEN", "up"))
     }
 
     @Test

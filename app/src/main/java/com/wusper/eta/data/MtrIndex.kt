@@ -15,14 +15,14 @@ class MtrIndex(val stations: List<Station>) {
         return have.sortedWith(compareBy({ rank[it.sta] ?: 10_000 }, { it.name }))
     }
 
-    fun near(lat: Double, lng: Double, radius: Int = 700): List<MtrStop> =
-        stations.map { station ->
+    fun near(lat: Double, lng: Double, radius: Int = 2000): List<MtrStop> {
+        val ranked = stations.map { station ->
             val meters = haversineMeters(lat, lng, station.lat, station.lng).toInt()
             station to meters
-        }.filter { it.second <= radius }
-            .sortedBy { it.second }
-            .take(4)
-            .map { (station, meters) ->
+        }.sortedBy { it.second }
+        val within = ranked.filter { it.second <= radius }.take(6)
+        val chosen = if (within.isNotEmpty()) within else ranked.take(3)
+        return chosen.map { (station, meters) ->
                 MtrStop(
                     sta = station.sta,
                     name = station.name,
@@ -34,6 +34,7 @@ class MtrIndex(val stations: List<Station>) {
                     },
                 )
             }
+    }
 
     data class Station(
         val sta: String,

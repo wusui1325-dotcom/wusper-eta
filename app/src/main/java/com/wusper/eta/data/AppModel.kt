@@ -495,14 +495,18 @@ class AppModel(initial: Snapshot) {
     }
 
     fun openRoute(route: Route) {
-        alongTitle = "${route.route}  ${route.dest}"
-        along = emptyList()
-        scope.launch {
-            along = try {
-                api.routeStops(route)
-            } catch (_: Exception) {
-                failed = true
-                emptyList()
+        openDetail(RouteFocus.Bus(route))
+    }
+
+    private fun reconcileTermini() {
+        stops.forEach { stop ->
+            stop.routes.forEach { route ->
+                if (shownBound.containsKey(route.key)) return@forEach
+                if (!atDestinationTerminus(stop.name, route.dest)) return@forEach
+                val other = otherBound(bounds, route) ?: return@forEach
+                if (atDestinationTerminus(other.stopName, other.dest)) return@forEach
+                val generation = flipGen[route.key] ?: 0
+                adoptBound(route.key, other, generation)
             }
         }
     }
@@ -657,6 +661,7 @@ class AppModel(initial: Snapshot) {
             if (stops.none { it.key == openKey }) openKey = stops.firstOrNull()?.key.orEmpty()
             enrichCoords()
             refreshOpenEtas()
+            reconcileTermini()
             index?.let { applyMtr(it) }
             refreshMtr()
             persist()
@@ -726,7 +731,8 @@ class AppModel(initial: Snapshot) {
                     withContext(Dispatchers.Main) {
                         val sideId = "${station.sta}|${line.code}"
                         if (sideId !in mtrSide && (pair.first.isNotEmpty() || pair.second.isNotEmpty())) {
-                            mtrSide = mtrSide + (sideId to preferredMtrSide(pair.first, pair.second))
+                            val preferred = preferredMtrSide(pair.first, pair.second)
+                            mtrSide = mtrSide + (sideId to usefulMtrSide(line.code, station.sta, preferred))
                         }
                         mtr = mtr.map { row ->
                             if (row.sta != station.sta) row
@@ -803,6 +809,7 @@ class AppModel(initial: Snapshot) {
             if (force || moved > 150) {
                 lat = fix.latitude
                 lng = fix.longitude
+                index?.let { applyMtr(it) }
                 refreshNearby()
             }
         }
@@ -827,6 +834,7 @@ class AppModel(initial: Snapshot) {
                 if (moved > 80) {
                     lat = location.latitude
                     lng = location.longitude
+                    index?.let { applyMtr(it) }
                     refreshNearby()
                 }
             }

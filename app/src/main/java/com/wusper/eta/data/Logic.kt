@@ -96,6 +96,32 @@ fun otherBound(bounds: List<BoundHit>, route: Route): BoundHit? {
         .minByOrNull { it.meters }
 }
 
+fun atDestinationTerminus(stopName: String, dest: String): Boolean {
+    val stop = stopName.replace(" ", "")
+    val bound = dest.replace(" ", "")
+    if (stop.length < 2 || bound.length < 2) return false
+    if (stop == bound || stop.startsWith(bound)) return true
+    val stopHead = stop.substringBefore('(').substringBefore('（')
+    val destHead = bound.substringBefore('(').substringBefore('（')
+    return stopHead.length >= 2 && stopHead == destHead
+}
+
+fun usefulMtrSide(lineCode: String, sta: String, fallback: String): String {
+    val order = mtrLineOrder(lineCode)
+    val at = order.indexOf(sta)
+    if (at < 0) return fallback
+    val northernEnd = when (lineCode) {
+        "EAL" -> sta == "LOW" || sta == "LMC"
+        "TKL" -> sta == "POA" || sta == "LHP"
+        else -> false
+    }
+    return when {
+        at == 0 -> "up"
+        northernEnd || at == order.lastIndex -> "down"
+        else -> fallback
+    }
+}
+
 fun preferredMtrSide(up: List<MtrTrain>, down: List<MtrTrain>): String {
     val upMin = up.mapNotNull { it.minutes }.minOrNull()
     val downMin = down.mapNotNull { it.minutes }.minOrNull()
