@@ -238,7 +238,7 @@ private fun ArrivalLine(row: Arrival, onHelp: (Help) -> Unit, onFlip: (Flip) -> 
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(top = 22.dp, bottom = 18.dp),
+                .padding(top = 12.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -283,7 +283,7 @@ private fun ArrivalLine(row: Arrival, onHelp: (Help) -> Unit, onFlip: (Flip) -> 
 @Composable
 private fun BoundButton(onClick: () -> Unit) {
     val cd = stringResource(R.string.cd_flip)
-    val diameter = with(LocalDensity.current) { (56f * Ink.textScale).sp.toDp() }
+    val diameter = with(LocalDensity.current) { (32f * Ink.textScale).sp.toDp() }
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val fill = if (pressed) Ink.black else androidx.compose.ui.graphics.Color.Transparent

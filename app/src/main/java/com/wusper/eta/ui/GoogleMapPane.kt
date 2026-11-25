@@ -26,7 +26,6 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.android.gms.maps.model.MarkerOptions
 import com.wusper.eta.R
 import com.wusper.eta.data.AppModel
@@ -47,10 +46,6 @@ fun GoogleMapPane(model: AppModel) {
                     isMapToolbarEnabled = false
                     isCompassEnabled = false
                     isMyLocationButtonEnabled = false
-                }
-                try {
-                    google.setMapStyle(MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style))
-                } catch (_: Exception) {
                 }
                 google.setOnMarkerClickListener { marker ->
                     val key = marker.tag as? String

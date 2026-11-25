@@ -50,7 +50,6 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.android.gms.maps.model.MarkerOptions
 import com.wusper.eta.R
 import com.wusper.eta.data.AppModel
@@ -63,26 +62,26 @@ import kotlinx.coroutines.launch
 private val detailTitle
     get() = androidx.compose.ui.text.TextStyle(
         color = Ink.black,
-        fontSize = (24f * Ink.textScale).sp,
+        fontSize = (18f * Ink.textScale).sp,
         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
     )
 private val detailStop
     get() = androidx.compose.ui.text.TextStyle(
         color = Ink.black,
-        fontSize = (34f * Ink.textScale).sp,
+        fontSize = (22f * Ink.textScale).sp,
         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
     )
 private val detailEta
     get() = androidx.compose.ui.text.TextStyle(
         color = Ink.black,
-        fontSize = (32f * Ink.textScale).sp,
+        fontSize = (20f * Ink.textScale).sp,
         fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
         fontFeatureSettings = "tnum",
     )
 private val detailMeta
     get() = androidx.compose.ui.text.TextStyle(
         color = Ink.mute,
-        fontSize = (22f * Ink.textScale).sp,
+        fontSize = (15f * Ink.textScale).sp,
     )
 
 @Composable
@@ -228,11 +227,11 @@ private fun ToolAction(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
-        Glyph(icon, label, fg, 28.dp)
+        Glyph(icon, label, fg, 22.dp)
         Spacer(Modifier.height(2.dp))
         BasicText(
             label,
-            style = Ink.small.copy(color = fg, fontSize = (16f * Ink.textScale).sp),
+            style = Ink.small.copy(color = fg, fontSize = (13f * Ink.textScale).sp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -261,13 +260,13 @@ private fun StopEtaRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 22.dp),
+                .padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicText(
                 if (stop.seq > 0) stop.seq.toString() else "",
                 style = detailStop,
-                modifier = Modifier.width(52.dp),
+                modifier = Modifier.width(36.dp),
             )
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
@@ -281,7 +280,7 @@ private fun StopEtaRow(
             val source = remember(stop.id) { MutableInteractionSource() }
             Box(
                 Modifier
-                    .size(44.dp)
+                    .size(36.dp)
                     .graphicsLayer { rotationZ = if (open) 180f else 0f }
                     .semantics {
                         contentDescription = more
@@ -290,7 +289,7 @@ private fun StopEtaRow(
                     .clickable(source, indication = null, onClick = onToggle),
                 contentAlignment = Alignment.Center,
             ) {
-                Glyph(Glyphs.chevron, null, Ink.black, 28.dp)
+                Glyph(Glyphs.chevron, null, Ink.black, 22.dp)
             }
         }
         if (open) {
@@ -349,10 +348,6 @@ private fun GoogleRouteMap(
                     isMapToolbarEnabled = false
                     isCompassEnabled = false
                     isMyLocationButtonEnabled = false
-                }
-                try {
-                    google.setMapStyle(MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style))
-                } catch (_: Exception) {
                 }
                 google.setOnCameraMoveStartedListener { reason ->
                     if (reason == GoogleMap.OnCameraMoveStartedListener.REASON_GESTURE) followed = false
