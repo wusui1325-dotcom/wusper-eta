@@ -224,6 +224,15 @@ private fun decodeChunk(encoded: String, start: Int): Pair<Int, Int>? {
     return null
 }
 
+fun nearestStop(stops: List<DetailStop>, lat: Double, lng: Double): DetailStop? {
+    val placed = stops.filter { it.lat != 0.0 && it.lng != 0.0 }
+    if (placed.isEmpty()) return null
+    if (lat == 0.0 && lng == 0.0) {
+        return placed.minWith(compareBy({ if (it.seq > 0) it.seq else Int.MAX_VALUE }, { it.id }))
+    }
+    return placed.minBy { haversineMeters(lat, lng, it.lat, it.lng) }
+}
+
 fun walkMinutes(meters: Double): Int {
     val mins = (meters / 1.3 / 60.0).roundToInt()
     return mins.coerceAtLeast(1)

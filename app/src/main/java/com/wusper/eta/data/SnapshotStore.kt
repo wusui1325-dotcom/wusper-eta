@@ -15,8 +15,7 @@ object SnapshotStore {
         if (file.isFile && file.length() in 32..MAX_BYTES) {
             parse(readText(file))?.let { return paint(it) }
         }
-        val seed = context.assets.open("seed_snapshot.json").bufferedReader().use { it.readText() }
-        return parse(seed)?.let { paint(it) } ?: fallback()
+        return centralBoard()
     }
 
     fun write(context: Context, snapshot: Snapshot) {
@@ -78,36 +77,6 @@ object SnapshotStore {
         put("plan", snapshot.plan?.json() ?: JSONObject.NULL)
     }
 
-    private fun fallback(): Snapshot = Snapshot(
-        at = 0,
-        tab = Tab.Bus,
-        lat = 22.2819,
-        lng = 114.158,
-        radius = 400,
-        openKey = "CTB|001050",
-        stops = listOf(
-            Stop(
-                key = "CTB|001050",
-                co = "CTB",
-                id = "001050",
-                name = "歷山大廈, 德輔道中",
-                meters = 58,
-                lat = 22.281459,
-                lng = 114.1583,
-                routes = listOf(
-                    route("CTB", "1", "O", "1", "跑馬地 (上)", "001050"),
-                    route("CTB", "10", "O", "1", "北角碼頭", "001050"),
-                ),
-            ),
-        ),
-        mtr = emptyList(),
-        fav = emptyList(),
-        recent = emptyList(),
-        origin = null,
-        dest = null,
-        planMode = "transit",
-        plan = null,
-    )
 }
 
 private fun tabOf(raw: String): Tab = when (raw.lowercase()) {
@@ -117,15 +86,6 @@ private fun tabOf(raw: String): Tab = when (raw.lowercase()) {
     "plan", "nav" -> Tab.Nav
     else -> Tab.Bus
 }
-
-private fun route(
-    co: String,
-    code: String,
-    dir: String,
-    service: String,
-    dest: String,
-    stopId: String,
-) = Route(co, code, dir, service, dest, stopId, "", "", EtaState.Loading, emptyList())
 
 private fun JSONArray?.stops(): List<Stop> {
     val arr = this ?: return emptyList()

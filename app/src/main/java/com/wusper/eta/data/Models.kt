@@ -80,6 +80,8 @@ data class MtrLine(
     val down: List<MtrTrain>,
 )
 
+data class TrainBoard(val up: List<MtrTrain>, val down: List<MtrTrain>)
+
 data class MtrStop(
     val sta: String,
     val name: String,

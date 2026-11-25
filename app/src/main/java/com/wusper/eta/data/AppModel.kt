@@ -8,6 +8,7 @@ import android.location.LocationManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.concurrent.Executors
@@ -16,7 +17,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -61,19 +61,33 @@ class AppModel(initial: Snapshot) {
     var shownBound by mutableStateOf<Map<String, BoundHit>>(emptyMap())
     var boundState by mutableStateOf<Map<String, EtaState>>(emptyMap())
     var boundEta by mutableStateOf<Map<String, List<EtaSlot>>>(emptyMap())
-    var mtrSide by mutableStateOf<Map<String, String>>(emptyMap())
+    val mtrSide = mutableStateMapOf<String, String>()
+    val mtrLive = mutableStateMapOf<String, TrainBoard>()
     var detail by mutableStateOf<RouteFocus?>(null)
     var detailStops by mutableStateOf<List<DetailStop>>(emptyList())
-    var detailNext by mutableStateOf<Map<String, EtaSlot?>>(emptyMap())
-    var detailTimes by mutableStateOf<Map<String, List<EtaSlot>>>(emptyMap())
-    var detailTransfers by mutableStateOf<Map<String, List<String>>>(emptyMap())
-    var detailRest by mutableStateOf<Map<String, List<EtaSlot>>>(emptyMap())
+    val detailNext = mutableStateMapOf<String, EtaSlot?>()
+    val detailTimes = mutableStateMapOf<String, List<EtaSlot>>()
+    val detailTransfers = mutableStateMapOf<String, List<String>>()
     var routeFav by mutableStateOf<Set<String>>(emptySet())
     var savedRoutes by mutableStateOf<List<FavRoute>>(emptyList())
-    var favEta by mutableStateOf<Map<String, List<EtaSlot>>>(emptyMap())
+    val favEta = mutableStateMapOf<String, List<EtaSlot>>()
+    val etaState = mutableStateMapOf<String, EtaState>()
+    val etaSlots = mutableStateMapOf<String, List<EtaSlot>>()
     var detailReady by mutableStateOf(false)
+    var etaOrder by mutableStateOf(0)
+    var mtrOrder by mutableStateOf(0)
+    var favOrder by mutableStateOf(0)
 
     var bootAt: Long = SystemClock.elapsedRealtime()
+    var boardWaitMs: Long = 0
+    internal val statePlain = HashMap<String, EtaState>()
+    internal val etaPlain = HashMap<String, List<EtaSlot>>()
+    internal val mtrPlain = HashMap<String, TrainBoard>()
+    internal val sidePlain = HashMap<String, String>()
+    internal val favPlain = HashMap<String, List<EtaSlot>>()
+    private val nonePlain = HashMap<String, Boolean>()
+    private val mtrNone = HashMap<String, Boolean>()
+    private val favNone = HashMap<String, Boolean>()
     private var savedAt: Long = initial.at
     private var index: MtrIndex? = null
     private var app: Context? = null
@@ -85,6 +99,7 @@ class AppModel(initial: Snapshot) {
         }
     }
     private var etaJob: Job? = null
+    private var persistJob: Job? = null
     private var searchJob: Job? = null
     private var placeJob: Job? = null
     private var planJob: Job? = null
@@ -106,18 +121,12 @@ class AppModel(initial: Snapshot) {
         savedRoutes = UiPrefs.savedRoutes(app!!)
         scope.launch {
             val ctx = app ?: return@launch
-            val indexJob = async(Dispatchers.IO) { MtrIndex.load(ctx) }
             launch { refreshVisibleEtas() }
-            index = indexJob.await()
+            index = withContext(Dispatchers.IO) { com.wusper.eta.Boot.awaitIndex() ?: MtrIndex.load(ctx) }
             launch { refreshMtr() }
             launch { refreshFavEtas() }
             launch { enrichCoords() }
             pullLocation()
-            delay(3_000)
-            try {
-                androidx.profileinstaller.ProfileInstaller.writeProfile(ctx)
-            } catch (_: Throwable) {
-            }
         }
     }
 
@@ -173,8 +182,14 @@ class AppModel(initial: Snapshot) {
     fun flipMtr(sta: String, line: String) {
         val id = "$sta|$line"
         val item = mtr.firstOrNull { it.sta == sta }?.lines?.firstOrNull { it.code == line }
-        val current = mtrSide[id] ?: if (item == null) "up" else preferredMtrSide(item.up, item.down)
-        mtrSide = mtrSide + (id to if (current == "up") "down" else "up")
+        val board = mtrPlain[id]
+        val up = board?.up ?: item?.up.orEmpty()
+        val down = board?.down ?: item?.down.orEmpty()
+        val current = mtrSide[id] ?: if (up.isEmpty() && down.isEmpty()) "up" else preferredMtrSide(up, down)
+        val next = if (current == "up") "down" else "up"
+        mtrSide[id] = next
+        sidePlain[id] = next
+        mtrOrder++
     }
 
     private fun adoptBound(id: String, hit: BoundHit, generation: Int) {
@@ -225,10 +240,9 @@ class AppModel(initial: Snapshot) {
         val token = detailToken
         detail = focus
         detailStops = emptyList()
-        detailNext = emptyMap()
-        detailTimes = emptyMap()
-        detailTransfers = emptyMap()
-        detailRest = emptyMap()
+        detailNext.clear()
+        detailTimes.clear()
+        detailTransfers.clear()
         transferPending.clear()
         detailReady = false
         showSettings = false
@@ -271,7 +285,7 @@ class AppModel(initial: Snapshot) {
     }
 
     fun ensureTransfers(stopId: String) {
-        if (stopId in detailTransfers || stopId in transferPending) return
+        if (detailTransfers.containsKey(stopId) || stopId in transferPending) return
         val focus = detail ?: return
         val stop = detailStops.firstOrNull { it.id == stopId } ?: return
         val token = detailToken
@@ -285,7 +299,7 @@ class AppModel(initial: Snapshot) {
             } catch (_: Exception) {
                 emptyList()
             }
-            if (token == detailToken) detailTransfers = detailTransfers + (stopId to names)
+            if (token == detailToken) detailTransfers[stopId] = names
         }
     }
 
@@ -312,7 +326,9 @@ class AppModel(initial: Snapshot) {
         if (id in routeFav) {
             routeFav = routeFav - id
             savedRoutes = savedRoutes.filterNot { it.id == id }
-            favEta = favEta - id
+            favEta.remove(id)
+            favPlain.remove(id)
+            favNone.remove(id)
         } else {
             val row = rememberFav(focus)
             routeFav = routeFav + id
@@ -378,7 +394,15 @@ class AppModel(initial: Snapshot) {
                     null
                 }
                 if (slots != null) {
-                    withContext(Dispatchers.Main) { favEta = favEta + (row.id to slots) }
+                    withContext(Dispatchers.Main) {
+                        favPlain[row.id] = slots
+                        favEta[row.id] = slots
+                        val none = slots.none { it.minutes != null }
+                        if ((favNone[row.id] == true) != none) {
+                            favNone[row.id] = none
+                            favOrder++
+                        }
+                    }
                 }
             }
         }
@@ -450,9 +474,8 @@ class AppModel(initial: Snapshot) {
         if (token != detailToken) return
         val ready = slots ?: listOf(EtaSlot(null, false))
         val timed = ready.filter { it.minutes != null }.take(3)
-        detailNext = detailNext + (id to (timed.firstOrNull() ?: ready.firstOrNull()))
-        detailTimes = detailTimes + (id to if (timed.isEmpty()) listOf(EtaSlot(null, ready.any { it.scheduled })) else timed)
-        detailRest = detailRest + (id to ready.drop(1).filter { it.minutes != null })
+        detailNext[id] = timed.firstOrNull() ?: ready.firstOrNull()
+        detailTimes[id] = if (timed.isEmpty()) listOf(EtaSlot(null, ready.any { it.scheduled })) else timed
     }
 
     fun open(key: String) {
@@ -724,6 +747,7 @@ class AppModel(initial: Snapshot) {
     }
 
     fun flush() {
+        persistJob?.cancel()
         val ctx = app ?: return
         val snap = capture()
         try {
@@ -799,29 +823,30 @@ class AppModel(initial: Snapshot) {
     }
 
     private fun applyEta(stopKey: String, routeKey: String, slots: List<EtaSlot>?) {
-        var ready = false
-        stops = stops.map { stop ->
-            if (stop.key != stopKey) stop
-            else stop.copy(
-                routes = stop.routes.map { route ->
-                    if (route.key != routeKey) route
-                    else if (slots == null) {
-                        if (route.state == EtaState.Ready) route else route.copy(state = EtaState.Failed)
-                    } else {
-                        ready = true
-                        route.copy(state = EtaState.Ready, etas = slots)
-                    }
-                },
-            )
-        }
-        if (ready) {
-            savedAt = System.currentTimeMillis()
-            if (!loggedEta) {
-                loggedEta = true
-                Log.i(TAG, "eta ${SystemClock.elapsedRealtime() - bootAt}ms")
+        val route = stops.firstOrNull { it.key == stopKey }?.routes?.firstOrNull { it.key == routeKey } ?: return
+        val prior = statePlain[routeKey] ?: route.state
+        if (slots == null) {
+            if (prior != EtaState.Ready) {
+                statePlain[routeKey] = EtaState.Failed
+                etaState[routeKey] = EtaState.Failed
             }
-            persist()
+            return
         }
+        statePlain[routeKey] = EtaState.Ready
+        etaPlain[routeKey] = slots
+        etaState[routeKey] = EtaState.Ready
+        etaSlots[routeKey] = slots
+        val none = slots.none { it.minutes != null }
+        if ((nonePlain[routeKey] == true) != none) {
+            nonePlain[routeKey] = none
+            etaOrder++
+        }
+        savedAt = System.currentTimeMillis()
+        if (!loggedEta) {
+            loggedEta = true
+            Log.i(TAG, "eta ${SystemClock.elapsedRealtime() - bootAt}ms")
+        }
+        persist()
     }
 
     private suspend fun refreshMtr() {
@@ -838,6 +863,9 @@ class AppModel(initial: Snapshot) {
                     } ?: return@launch
                     withContext(Dispatchers.Main) {
                         val sideId = "${station.sta}|${line.code}"
+                        val board = TrainBoard(pair.first, pair.second)
+                        mtrPlain[sideId] = board
+                        mtrLive[sideId] = board
                         if (sideId !in mtrSide && (pair.first.isNotEmpty() || pair.second.isNotEmpty())) {
                             val preferred = preferredMtrSide(pair.first, pair.second)
                             var side = usefulMtrSide(line.code, station.sta, preferred)
@@ -849,15 +877,17 @@ class AppModel(initial: Snapshot) {
                                 val otherDest = other.firstOrNull()?.dest.orEmpty()
                                 if (otherDest.isBlank() || !atDestinationTerminus(station.name, otherDest)) side = flipped
                             }
-                            mtrSide = mtrSide + (sideId to side)
+                            mtrSide[sideId] = side
+                            sidePlain[sideId] = side
+                            mtrOrder++
                         }
-                        mtr = mtr.map { row ->
-                            if (row.sta != station.sta) row
-                            else row.copy(
-                                lines = row.lines.map { item ->
-                                    if (item.code != line.code) item else item.copy(up = pair.first, down = pair.second)
-                                },
-                            )
+                        val side = mtrSide[sideId] ?: sidePlain[sideId]
+                        val shown = if (side == "down") pair.second else pair.first
+                        val waiting = pair.first.isEmpty() && pair.second.isEmpty()
+                        val none = !waiting && shown.none { it.minutes != null }
+                        if ((mtrNone[sideId] == true) != none) {
+                            mtrNone[sideId] = none
+                            mtrOrder++
                         }
                         savedAt = System.currentTimeMillis()
                         if (!loggedEta) {
@@ -969,10 +999,14 @@ class AppModel(initial: Snapshot) {
 
     private fun persist() {
         val ctx = app ?: return
-        val snap = capture()
-        try {
-            writer.execute { SnapshotStore.write(ctx, snap) }
-        } catch (_: Exception) {
+        persistJob?.cancel()
+        persistJob = scope.launch {
+            delay(1200)
+            val snap = capture()
+            try {
+                writer.execute { SnapshotStore.write(ctx, snap) }
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -983,8 +1017,22 @@ class AppModel(initial: Snapshot) {
         lng = lng,
         radius = radius,
         openKey = openKey,
-        stops = stops,
-        mtr = mtr,
+        stops = stops.map { stop ->
+            stop.copy(
+                routes = stop.routes.map { route ->
+                    val state = statePlain[route.key] ?: return@map route
+                    route.copy(state = state, etas = etaPlain[route.key] ?: route.etas)
+                },
+            )
+        },
+        mtr = mtr.map { station ->
+            station.copy(
+                lines = station.lines.map { line ->
+                    val board = mtrPlain["${station.sta}|${line.code}"] ?: return@map line
+                    line.copy(up = board.up, down = board.down)
+                },
+            )
+        },
         fav = fav,
         recent = recent,
         origin = origin,

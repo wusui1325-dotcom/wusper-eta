@@ -1,9 +1,5 @@
 package com.wusper.eta.ui
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +44,9 @@ import com.wusper.eta.data.MtrLine
 import com.wusper.eta.data.Route
 import com.wusper.eta.data.RouteFocus
 import com.wusper.eta.data.Stop
+import com.wusper.eta.data.TrainBoard
+
+private enum class Live { None, Bus, Fav }
 
 private data class Arrival(
     val key: String,
@@ -60,6 +59,8 @@ private data class Arrival(
     val flip: Flip?,
     val focus: RouteFocus?,
     val meters: Int,
+    val live: Live = Live.None,
+    val boardKey: String? = null,
 )
 
 private sealed class Flip {
@@ -69,9 +70,9 @@ private sealed class Flip {
 
 @Composable
 fun FavoriteRoutes(model: AppModel) {
-    val rows = remember(model.savedRoutes, model.favEta) {
+    val rows = remember(model.savedRoutes, model.favOrder) {
         model.savedRoutes.map { fav ->
-            val slots = model.favEta[fav.id]
+            val slots = model.favPlain[fav.id]
             Arrival(
                 key = fav.id,
                 route = fav.title,
@@ -87,20 +88,21 @@ fun FavoriteRoutes(model: AppModel) {
                     RouteFocus.Bus(fav.asRoute())
                 },
                 meters = 0,
+                live = Live.Fav,
             )
         }.byLiveEtaThenDistance()
     }
     ArrivalColumn {
-        items(rows, key = { it.key }) { row ->
-            ArrivalLine(row, {}, {}) { row.focus?.let { model.openDetail(it) } }
+        items(rows, key = { it.key }, contentType = { "arrival" }) { row ->
+            ArrivalLine(row.shown(model), {}, {}) { row.focus?.let { model.openDetail(it) } }
         }
     }
 }
 
 @Composable
 fun BusHome(model: AppModel) {
-    val rows = remember(model.stops, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta) {
-        busArrivals(model.stops, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta)
+    val rows = remember(model.stops, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta, model.etaOrder) {
+        busArrivals(model.stops, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta, model.statePlain, model.etaPlain)
     }
     ArrivalColumn {
         item {
@@ -109,8 +111,8 @@ fun BusHome(model: AppModel) {
         if (model.failed && rows.isEmpty()) {
             item { FailLine { model.refresh() } }
         }
-        items(rows, key = { it.key }) { row ->
-            ArrivalLine(row, { model.help = it }, { flipOf(model, it) }) {
+        items(rows, key = { it.key }, contentType = { "arrival" }) { row ->
+            ArrivalLine(row.shown(model), { model.help = it }, { flipOf(model, it) }) {
                 row.focus?.let { model.openDetail(it) }
             }
         }
@@ -119,8 +121,8 @@ fun BusHome(model: AppModel) {
 
 @Composable
 fun MtrHome(model: AppModel) {
-    val rows = remember(model.mtr, model.lat, model.lng, model.mtrSide) {
-        mtrArrivals(model.mtr, model.lat, model.lng, model.mtrSide)
+    val rows = remember(model.mtr, model.lat, model.lng, model.mtrOrder) {
+        mtrArrivals(model.mtr, model.lat, model.lng, model.sidePlain)
     }
     ArrivalColumn {
         item {
@@ -132,8 +134,8 @@ fun MtrHome(model: AppModel) {
                 }
             }
         }
-        items(rows, key = { it.key }) { row ->
-            ArrivalLine(row, { model.help = it }, { flipOf(model, it) }) {
+        items(rows, key = { it.key }, contentType = { "arrival" }) { row ->
+            ArrivalLine(row.shown(model), { model.help = it }, { flipOf(model, it) }) {
                 row.focus?.let { model.openDetail(it) }
             }
         }
@@ -147,6 +149,37 @@ private fun flipOf(model: AppModel, flip: Flip) {
     }
 }
 
+private fun Arrival.shown(model: AppModel): Arrival {
+    val boardKey = this.boardKey
+    if (boardKey != null) {
+        val board = model.mtrLive[boardKey] ?: return this
+        return projectMtr(this, board, model.mtrSide[boardKey])
+    }
+    return when (live) {
+        Live.Bus -> {
+            val state = model.etaState[key] ?: return this
+            overlay(state, model.etaSlots[key].orEmpty())
+        }
+        Live.Fav -> {
+            val slots = model.favEta[key] ?: return this
+            overlay(EtaState.Ready, slots)
+        }
+        Live.None -> this
+    }
+}
+
+private fun Arrival.overlay(state: EtaState, etas: List<EtaSlot>): Arrival {
+    return if (this.state == state && this.etas == etas) this else copy(state = state, etas = etas)
+}
+
+private fun projectMtr(row: Arrival, board: TrainBoard, side: String?): Arrival {
+    val key = row.boardKey ?: return row
+    val line = MtrLine(key.substringAfter('|'), row.route, board.up, board.down)
+    val sides = if (side == null) emptyMap() else mapOf(key to side)
+    val next = mtrLine(key.substringBefore('|'), row.stop, line, sides, row.meters).copy(boardKey = key)
+    return if (next.dest == row.dest && next.state == row.state && next.etas == row.etas && next.focus == row.focus) row else next
+}
+
 private fun busArrivals(
     stops: List<Stop>,
     lat: Double,
@@ -154,6 +187,8 @@ private fun busArrivals(
     shown: Map<String, com.wusper.eta.data.BoundHit>,
     states: Map<String, EtaState>,
     etas: Map<String, List<EtaSlot>>,
+    liveState: Map<String, EtaState>,
+    liveEta: Map<String, List<EtaSlot>>,
 ): List<Arrival> {
     val ranked = stops
         .filter { it.co != "MTR" && it.routes.isNotEmpty() }
@@ -167,8 +202,12 @@ private fun busArrivals(
                 route = route.route,
                 dest = hit?.dest ?: route.dest,
                 stop = hit?.stopName ?: stop.name,
-                state = if (hit == null) route.state else states[route.key] ?: EtaState.Loading,
-                etas = if (hit == null) route.etas else etas[route.key].orEmpty(),
+                state = if (hit != null) {
+                    states[route.key] ?: EtaState.Loading
+                } else {
+                    liveState[route.key] ?: route.state
+                },
+                etas = if (hit != null) etas[route.key].orEmpty() else liveEta[route.key] ?: route.etas,
                 help = when {
                     route.co == "GMB" -> Help.Gmb
                     route.serviceType != "1" -> Help.Service
@@ -177,9 +216,10 @@ private fun busArrivals(
                 flip = Flip.Bus(route),
                 focus = RouteFocus.Bus(hit?.asRoute() ?: route),
                 meters = meters,
+                live = if (hit == null) Live.Bus else Live.None,
             )
         }
-    }.byLiveEtaThenDistance()
+    }.distinctBy { it.key }.byLiveEtaThenDistance()
 }
 
 private fun distanceOf(lat: Double, lng: Double, fallback: Int, userLat: Double, userLng: Double): Int {
@@ -244,6 +284,7 @@ private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String,
         flip = Flip.Mtr(sta, line.code),
         focus = RouteFocus.Mtr(line.code, line.name, side),
         meters = meters,
+        boardKey = "$sta|${line.code}",
     )
 }
 
@@ -257,7 +298,8 @@ private val Arrival.noDeparture: Boolean
 private fun ArrivalColumn(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
-            Modifier
+            state = androidx.compose.foundation.lazy.rememberLazyListState(),
+            modifier = Modifier
                 .widthIn(max = 640.dp)
                 .fillMaxSize()
                 .padding(horizontal = 28.dp),
@@ -372,13 +414,7 @@ private fun MinuteCluster(state: EtaState, etas: List<EtaSlot>, onHelp: (Help) -
     }
     val scheduled = state == EtaState.Ready && etas.any { it.scheduled && it.minutes != null }
     val none = state == EtaState.Ready && etas.none { it.minutes != null }
-    if (Ink.reduceMotion) {
-        EtaText(label, scheduled, none, onHelp)
-    } else {
-        AnimatedContent(label, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "min") { text ->
-            EtaText(text, scheduled, none, onHelp)
-        }
-    }
+    EtaText(label, scheduled, none, onHelp)
 }
 
 @Composable

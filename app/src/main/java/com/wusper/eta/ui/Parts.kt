@@ -56,28 +56,78 @@ object Ink {
     var highContrast by mutableStateOf(false)
     var reduceMotion by mutableStateOf(false)
     private val sans = FontFamily.SansSerif
-    val paper get() = if (night) androidx.compose.ui.graphics.Color(0xFF111111) else androidx.compose.ui.graphics.Color(0xFFFFFFFF)
-    val black get() = if (night) androidx.compose.ui.graphics.Color(0xFFFFFFFF) else androidx.compose.ui.graphics.Color(0xFF111111)
-    val mute get() = if (highContrast) black else if (night) androidx.compose.ui.graphics.Color(0xFF9A9A9A) else androidx.compose.ui.graphics.Color(0xFF6A6A6A)
-    val line get() = if (highContrast) black else if (night) androidx.compose.ui.graphics.Color(0xFF2A2A2A) else androidx.compose.ui.graphics.Color(0xFFE4E4E4)
+
+    private class Type(val night: Boolean, val contrast: Boolean, val scale: Float) {
+        val paper = if (night) androidx.compose.ui.graphics.Color(0xFF111111) else androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+        val black = if (night) androidx.compose.ui.graphics.Color(0xFFFFFFFF) else androidx.compose.ui.graphics.Color(0xFF111111)
+        val mute = if (contrast) black else if (night) androidx.compose.ui.graphics.Color(0xFF9A9A9A) else androidx.compose.ui.graphics.Color(0xFF6A6A6A)
+        val line = if (contrast) black else if (night) androidx.compose.ui.graphics.Color(0xFF2A2A2A) else androidx.compose.ui.graphics.Color(0xFFE4E4E4)
+        val wash = if (night) androidx.compose.ui.graphics.Color(0xFF1A1A1A) else androidx.compose.ui.graphics.Color(0xFFF6F6F6)
+        val bar = if (night) androidx.compose.ui.graphics.Color(0xFF000000) else androidx.compose.ui.graphics.Color(0xFFFFFFFF)
+        val barInk = if (night) androidx.compose.ui.graphics.Color(0xFFFFFFFF) else androidx.compose.ui.graphics.Color(0xFF111111)
+        val word = TextStyle(color = black, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, fontFamily = sans, letterSpacing = 0.4.sp)
+        val title = TextStyle(color = black, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = sans)
+        val body = TextStyle(color = black, fontSize = 15.sp, fontFamily = sans)
+        val display = TextStyle(color = black, fontSize = 26.sp, fontWeight = FontWeight.Medium, fontFamily = sans, letterSpacing = (-0.4).sp)
+        val route = TextStyle(color = black, fontSize = 20.sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
+        val minute = TextStyle(color = black, fontSize = 20.sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
+        val arrivalRoute = TextStyle(color = black, fontSize = (32f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum", letterSpacing = (-0.4).sp)
+        val arrivalBound = TextStyle(color = black, fontSize = (18f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans)
+        val stopLine = TextStyle(color = black, fontSize = (18f * scale).sp, fontFamily = sans)
+        val stopEta = TextStyle(color = black, fontSize = (18f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
+        val arrivalStop = TextStyle(color = mute, fontSize = (16f * scale).sp, fontFamily = sans)
+        val arrivalEta = TextStyle(color = black, fontSize = (26f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
+        val meta = TextStyle(color = mute, fontSize = 12.sp, fontFamily = sans, fontFeatureSettings = "tnum")
+        val small = TextStyle(color = black, fontSize = 12.sp, fontFamily = sans)
+        val detailTitle = TextStyle(color = black, fontSize = (18f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans)
+        val detailStop = TextStyle(color = black, fontSize = (22f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans)
+        val detailEta = TextStyle(color = black, fontSize = (20f * scale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
+        val detailMeta = TextStyle(color = mute, fontSize = (15f * scale).sp, fontFamily = sans)
+        val toolLabel = TextStyle(color = black, fontSize = (13f * scale).sp, fontFamily = sans)
+        val toolLabelOn = TextStyle(color = paper, fontSize = (13f * scale).sp, fontFamily = sans)
+    }
+
+    private var cached = Type(false, false, 1f)
+
+    private fun type(): Type {
+        val mode = night
+        val contrast = highContrast
+        val scale = textScale
+        val current = cached
+        if (current.night != mode || current.contrast != contrast || current.scale != scale) {
+            cached = Type(mode, contrast, scale)
+        }
+        return cached
+    }
+
+    val paper get() = type().paper
+    val black get() = type().black
+    val mute get() = type().mute
+    val line get() = type().line
     val lineWidth get() = if (highContrast) 2.dp else 1.dp
-    val wash get() = if (night) androidx.compose.ui.graphics.Color(0xFF1A1A1A) else androidx.compose.ui.graphics.Color(0xFFF6F6F6)
-    val bar get() = if (night) androidx.compose.ui.graphics.Color(0xFF000000) else androidx.compose.ui.graphics.Color(0xFFFFFFFF)
-    val barInk get() = if (night) androidx.compose.ui.graphics.Color(0xFFFFFFFF) else androidx.compose.ui.graphics.Color(0xFF111111)
-    val word get() = TextStyle(color = black, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, fontFamily = sans, letterSpacing = 0.4.sp)
-    val title get() = TextStyle(color = black, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = sans)
-    val body get() = TextStyle(color = black, fontSize = 15.sp, fontFamily = sans)
-    val display get() = TextStyle(color = black, fontSize = 26.sp, fontWeight = FontWeight.Medium, fontFamily = sans, letterSpacing = (-0.4).sp)
-    val route get() = TextStyle(color = black, fontSize = 20.sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
-    val minute get() = TextStyle(color = black, fontSize = 20.sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
-    val arrivalRoute get() = TextStyle(color = black, fontSize = (32f * textScale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum", letterSpacing = (-0.4).sp)
-    val arrivalBound get() = TextStyle(color = black, fontSize = (18f * textScale).sp, fontWeight = FontWeight.Medium, fontFamily = sans)
-    val stopLine get() = TextStyle(color = black, fontSize = (18f * textScale).sp, fontFamily = sans)
-    val stopEta get() = TextStyle(color = black, fontSize = (18f * textScale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
-    val arrivalStop get() = TextStyle(color = mute, fontSize = (16f * textScale).sp, fontFamily = sans)
-    val arrivalEta get() = TextStyle(color = black, fontSize = (26f * textScale).sp, fontWeight = FontWeight.Medium, fontFamily = sans, fontFeatureSettings = "tnum")
-    val meta get() = TextStyle(color = mute, fontSize = 12.sp, fontFamily = sans, fontFeatureSettings = "tnum")
-    val small get() = TextStyle(color = black, fontSize = 12.sp, fontFamily = sans)
+    val wash get() = type().wash
+    val bar get() = type().bar
+    val barInk get() = type().barInk
+    val word get() = type().word
+    val title get() = type().title
+    val body get() = type().body
+    val display get() = type().display
+    val route get() = type().route
+    val minute get() = type().minute
+    val arrivalRoute get() = type().arrivalRoute
+    val arrivalBound get() = type().arrivalBound
+    val stopLine get() = type().stopLine
+    val stopEta get() = type().stopEta
+    val arrivalStop get() = type().arrivalStop
+    val arrivalEta get() = type().arrivalEta
+    val meta get() = type().meta
+    val small get() = type().small
+    val detailTitle get() = type().detailTitle
+    val detailStop get() = type().detailStop
+    val detailEta get() = type().detailEta
+    val detailMeta get() = type().detailMeta
+    val toolLabel get() = type().toolLabel
+    val toolLabelOn get() = type().toolLabelOn
 }
 
 @Composable

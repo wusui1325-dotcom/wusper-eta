@@ -31,8 +31,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -56,8 +67,12 @@ android {
                 "META-INF/DEPENDENCIES",
                 "META-INF/LICENSE",
                 "META-INF/LICENSE.txt",
+                "META-INF/LICENSE.md",
                 "META-INF/NOTICE",
                 "META-INF/NOTICE.txt",
+                "META-INF/NOTICE.md",
+                "META-INF/*.kotlin_module",
+                "DebugProbesKt.bin",
             )
         }
     }
@@ -77,6 +92,5 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.animation)
     implementation(libs.maps)
-    implementation(libs.profileinstaller)
     testImplementation(libs.junit)
 }

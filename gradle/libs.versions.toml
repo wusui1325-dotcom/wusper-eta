@@ -6,7 +6,6 @@ activity = "1.10.1"
 coroutines = "1.10.2"
 compose = "1.9.4"
 maps = "19.2.0"
-profileinstaller = "1.4.1"
 junit = "4.13.2"
 
 [libraries]
@@ -17,7 +16,6 @@ compose-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "compos
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "compose" }
 compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "compose" }
 maps = { group = "com.google.android.gms", name = "play-services-maps", version.ref = "maps" }
-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
 [plugins]

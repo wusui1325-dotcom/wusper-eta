@@ -1,5 +1,6 @@
 package com.wusper.eta
 
+import com.wusper.eta.data.DetailStop
 import com.wusper.eta.data.BoundHit
 import com.wusper.eta.data.EtaState
 import com.wusper.eta.data.MtrTrain
@@ -15,6 +16,7 @@ import com.wusper.eta.data.matchesStopName
 import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.mtrLineOrder
+import com.wusper.eta.data.nearestStop
 import com.wusper.eta.data.usefulMtrSide
 import com.wusper.eta.data.oppositeDir
 import com.wusper.eta.data.otherBound
@@ -125,6 +127,18 @@ class LogicTest {
         assertTrue(order.indexOf("ADM") < order.indexOf("TAW"))
         assertTrue(order.indexOf("TAW") < order.indexOf("LOW"))
         assertTrue(order.contains("LMC"))
+    }
+
+    @Test
+    fun detailMapOpensOnTheNearestStop() {
+        val far = DetailStop("far", "遠", 22.30, 114.20, 1)
+        val near = DetailStop("near", "近", 22.2820, 114.1582, 4)
+        val blank = DetailStop("none", "無", 0.0, 0.0, 2)
+        val hit = nearestStop(listOf(far, blank, near), 22.2819, 114.1580)
+        assertEquals("near", hit?.id)
+        assertTrue(haversineMeters(22.2819, 114.1580, hit!!.lat, hit.lng) < haversineMeters(22.2819, 114.1580, far.lat, far.lng))
+        val first = nearestStop(listOf(near, far), 0.0, 0.0)
+        assertEquals("far", first?.id)
     }
 
     @Test

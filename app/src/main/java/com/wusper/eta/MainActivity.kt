@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.view.WindowCompat
 import com.wusper.eta.data.AppModel
-import com.wusper.eta.data.SnapshotStore
 import com.wusper.eta.data.UiPrefs
 import com.wusper.eta.ui.Root
 
@@ -21,10 +20,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         UiPrefs.loadIntoInk(this)
-        val model = held ?: AppModel(SnapshotStore.read(this)).also {
+        val boardWait = SystemClock.elapsedRealtime()
+        val board = Boot.await()
+        val waited = SystemClock.elapsedRealtime() - boardWait
+        val model = held ?: AppModel(board).also {
             it.bootAt = android.os.Process.getStartElapsedRealtime()
             held = it
         }
+        model.boardWaitMs = waited
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowCompat.getInsetsController(window, window.decorView).apply {
             isAppearanceLightStatusBars = true
@@ -37,7 +40,10 @@ class MainActivity : ComponentActivity() {
                 if (window.decorView.viewTreeObserver.isAlive) {
                     window.decorView.viewTreeObserver.removeOnPreDrawListener(this)
                 }
-                Log.i(TAG, "first frame ${SystemClock.elapsedRealtime() - model.bootAt}ms")
+                Log.i(
+                    TAG,
+                    "first frame ${SystemClock.elapsedRealtime() - model.bootAt}ms parse ${Boot.parseMs}ms wait ${model.boardWaitMs}ms cache ${Boot.fromCache}",
+                )
                 window.decorView.post { model.start(applicationContext) }
                 return true
             }

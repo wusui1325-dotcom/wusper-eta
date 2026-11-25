@@ -42,8 +42,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -57,38 +57,14 @@ import com.wusper.eta.data.DetailStop
 import com.wusper.eta.data.EtaSlot
 import com.wusper.eta.data.RouteFocus
 import com.wusper.eta.data.haversineMeters
+import com.wusper.eta.data.nearestStop
 import kotlinx.coroutines.launch
-
-private val detailTitle
-    get() = androidx.compose.ui.text.TextStyle(
-        color = Ink.black,
-        fontSize = (18f * Ink.textScale).sp,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-    )
-private val detailStop
-    get() = androidx.compose.ui.text.TextStyle(
-        color = Ink.black,
-        fontSize = (22f * Ink.textScale).sp,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-    )
-private val detailEta
-    get() = androidx.compose.ui.text.TextStyle(
-        color = Ink.black,
-        fontSize = (20f * Ink.textScale).sp,
-        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-        fontFeatureSettings = "tnum",
-    )
-private val detailMeta
-    get() = androidx.compose.ui.text.TextStyle(
-        color = Ink.mute,
-        fontSize = (15f * Ink.textScale).sp,
-    )
 
 @Composable
 fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
     val focus = model.detail ?: return
     val saved = focus.favId in model.routeFav
-    var expanded by remember(focus.favId) { mutableStateOf(setOf<String>()) }
+    val expanded = remember(focus.favId) { mutableStateMapOf<String, Boolean>() }
     var showCodes by remember(focus.favId) { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -120,7 +96,7 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                         is RouteFocus.Bus -> focus.route.route
                         is RouteFocus.Mtr -> focus.name
                     },
-                    style = detailTitle,
+                    style = Ink.detailTitle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
@@ -149,8 +125,12 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                         state = listState,
                         modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
                     ) {
-                        items(model.detailStops, key = { "${it.seq}-${it.id}" }) { stop ->
-                            val open = stop.id in expanded
+                        items(
+                            model.detailStops,
+                            key = { "${it.seq}-${it.id}" },
+                            contentType = { "stop" },
+                        ) { stop ->
+                            val open = expanded[stop.id] == true
                             StopEtaRow(
                                 stop = stop,
                                 next = model.detailNext[stop.id],
@@ -159,8 +139,9 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                                 open = open,
                                 showCode = showCodes,
                                 onToggle = {
-                                    expanded = if (open) expanded - stop.id else expanded + stop.id
-                                    if (!open) model.ensureTransfers(stop.id)
+                                    val next = !open
+                                    expanded[stop.id] = next
+                                    if (next) model.ensureTransfers(stop.id)
                                 },
                             )
                         }
@@ -231,7 +212,7 @@ private fun ToolAction(
         Spacer(Modifier.height(2.dp))
         BasicText(
             label,
-            style = Ink.small.copy(color = fg, fontSize = (13f * Ink.textScale).sp),
+            style = if (selected) Ink.toolLabelOn else Ink.toolLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -265,17 +246,17 @@ private fun StopEtaRow(
         ) {
             BasicText(
                 if (stop.seq > 0) stop.seq.toString() else "",
-                style = detailStop,
+                style = Ink.detailStop,
                 modifier = Modifier.width(36.dp),
             )
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                BasicText(stop.name, style = detailStop, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                BasicText(stop.name, style = Ink.detailStop, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (showCode) {
-                    BasicText(stop.id, style = detailMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicText(stop.id, style = Ink.detailMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            BasicText(eta, style = detailEta)
+            BasicText(eta, style = Ink.detailEta)
             Spacer(Modifier.width(12.dp))
             val source = remember(stop.id) { MutableInteractionSource() }
             Box(
@@ -296,13 +277,13 @@ private fun StopEtaRow(
             Column(Modifier.padding(bottom = 16.dp)) {
                 BasicText(
                     if (upcoming.isEmpty()) none else upcoming.joinToString("    ") { "$it′" },
-                    style = detailEta,
+                    style = Ink.detailEta,
                 )
                 if (!transfers.isNullOrEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     BasicText(
                         transfers.joinToString("    "),
-                        style = detailMeta,
+                        style = Ink.detailMeta,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -334,7 +315,7 @@ private fun GoogleRouteMap(
 ) {
     val context = LocalContext.current
     var map by remember { mutableStateOf<GoogleMap?>(null) }
-    var followed by remember { mutableStateOf(true) }
+    var followed by remember(stops) { mutableStateOf(true) }
     val icons = remember { HashMap<Int, com.google.android.gms.maps.model.BitmapDescriptor>() }
     val onStopNow = rememberUpdatedState(onStop)
     val mapView = remember {
@@ -368,10 +349,11 @@ private fun GoogleRouteMap(
         val google = map ?: return@LaunchedEffect
         placeStops(google, stops, icons) { onStopNow.value(it) }
     }
-    LaunchedEffect(map, hereLat, hereLng, followed) {
+    LaunchedEffect(map, stops, hereLat, hereLng, followed) {
         val google = map ?: return@LaunchedEffect
-        if (!followed || hereLat == 0.0 || hereLng == 0.0) return@LaunchedEffect
-        val update = CameraUpdateFactory.newLatLngZoom(LatLng(hereLat, hereLng), 16f)
+        if (!followed) return@LaunchedEffect
+        val stop = nearestStop(stops, hereLat, hereLng) ?: return@LaunchedEffect
+        val update = CameraUpdateFactory.newLatLngZoom(LatLng(stop.lat, stop.lng), 16f)
         try {
             google.moveCamera(update)
         } catch (_: Exception) {

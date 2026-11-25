@@ -160,14 +160,18 @@ fun SearchPane(model: AppModel) {
         Box(Modifier.padding(horizontal = 28.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
         LazyColumn(Modifier.weight(1f).padding(horizontal = 28.dp)) {
             if (routeMode) {
-                items(model.foundRoutes, key = { route -> "fr-${route.co}-${route.route}-${route.dir}-${route.dest}" }) { route ->
+                items(
+                    model.foundRoutes,
+                    key = { route -> "${route.key}|${route.dest}" },
+                    contentType = { "route" },
+                ) { route ->
                     SearchRouteRow(route) { model.openRoute(route) }
                 }
             } else {
-                items(model.foundStops, key = { "fs-${it.key}" }) { stop ->
+                items(model.foundStops, key = { "fs-${it.key}" }, contentType = { "stop" }) { stop ->
                     NameRow(stop.name, stop.nameEn) { model.openStop(stop) }
                 }
-                items(model.foundMtr, key = { "fm-${it.sta}" }) { station ->
+                items(model.foundMtr, key = { "fm-${it.sta}" }, contentType = { "mtr" }) { station ->
                     NameRow(station.name, station.nameEn) { model.openMtr(station) }
                 }
             }

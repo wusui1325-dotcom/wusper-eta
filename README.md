@@ -10,8 +10,8 @@
 - 附近路線：九巴、城巴、專線小巴（`https://wusper.com/api/eta/nearby-routes`）
 - 官方到站：九巴、城巴、專線小巴、港鐵
 - 站與路線搜尋
-- 地圖：有 Maps 金鑰時用 Google Maps SDK；否則畫站點示意
-- 行程：有 Routes 金鑰時用 Google Routes API（步行或公交）。沒有金鑰時只顯示標成「示範」的直線距離，不會改走其他地圖
+- 地圖：Google Maps SDK，使用預設彩色底圖。金鑰只放在本機 `local.properties`
+- 行程：`POST https://wusper.com/api/eta/compute-routes`。沒有路徑時顯示「未能規劃」
 - 收藏與最近看過的站，只存在這部手機。沒有登入
 
 可疑的名稱旁邊有圓圈問號，說明在按下去之後才出現。
@@ -64,7 +64,7 @@ Debug 憑證 SHA-1：
 keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
 ```
 
-沒有 Maps 金鑰時，地圖頁是站點示意。行程由 `https://wusper.com/api/eta/compute-routes` 規劃，應用程式不內建 Routes 金鑰。沒有路徑時只顯示「未能規劃」。
+行程由 `https://wusper.com/api/eta/compute-routes` 規劃，應用程式不內建 Routes 金鑰。沒有路徑時只顯示「未能規劃」。
 
 ## 資料
 
