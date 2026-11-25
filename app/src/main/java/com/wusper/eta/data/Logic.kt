@@ -67,6 +67,23 @@ fun formatMeters(meters: Int): String {
     return "$whole.${tenth}km"
 }
 
+fun chooseWidgetRoute(
+    favorites: List<FavRoute>,
+    usage: List<Pair<FavRoute, Int>>,
+    last: FavRoute?,
+    nearby: FavRoute?,
+): FavRoute? {
+    if (favorites.isNotEmpty()) {
+        val counts = usage.associate { it.first.id to it.second }
+        return favorites.withIndex().maxWithOrNull(
+            compareBy({ counts[it.value.id] ?: 0 }, { -it.index }),
+        )?.value
+    }
+    val frequent = usage.filter { it.second > 0 }.maxByOrNull { it.second }?.first
+    if (frequent != null) return frequent
+    return last ?: nearby
+}
+
 fun matchesStopName(query: String, nameZh: String, nameEn: String): Boolean {
     val q = query.trim()
     if (q.isEmpty()) return false

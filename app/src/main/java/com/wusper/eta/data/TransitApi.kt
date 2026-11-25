@@ -192,6 +192,15 @@ class TransitApi {
         }
     }
 
+    suspend fun mtrReady(line: String, sta: String, names: (String) -> String): Pair<List<MtrTrain>, List<MtrTrain>>? =
+        withContext(Dispatchers.IO) {
+            val url = "https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${enc(line)}&sta=${enc(sta)}"
+            val root = JSONObject(get(url))
+            if (root.optInt("status", 0) != 1) return@withContext null
+            val block = root.optJSONObject("data")?.optJSONObject("$line-$sta") ?: return@withContext null
+            block.optJSONArray("UP").trains(names) to block.optJSONArray("DOWN").trains(names)
+        }
+
     suspend fun mtr(line: String, sta: String, names: (String) -> String): Pair<List<MtrTrain>, List<MtrTrain>> =
         withContext(Dispatchers.IO) {
             val url = "https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php?line=${enc(line)}&sta=${enc(sta)}"

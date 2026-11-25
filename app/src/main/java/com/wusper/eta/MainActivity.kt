@@ -1,6 +1,7 @@
 package com.wusper.eta
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -44,10 +45,19 @@ class MainActivity : ComponentActivity() {
                     TAG,
                     "first frame ${SystemClock.elapsedRealtime() - model.bootAt}ms parse ${Boot.parseMs}ms wait ${model.boardWaitMs}ms cache ${Boot.fromCache}",
                 )
-                window.decorView.post { model.start(applicationContext) }
+                window.decorView.post {
+                    model.start(applicationContext)
+                    model.openWidget(intent)
+                }
                 return true
             }
         })
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        held?.openWidget(intent)
     }
 
     override fun onStop() {

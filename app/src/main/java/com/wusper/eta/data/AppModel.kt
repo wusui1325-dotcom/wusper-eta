@@ -2,6 +2,7 @@ package com.wusper.eta.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationListener
 import android.location.LocationManager
@@ -39,6 +40,8 @@ class AppModel(initial: Snapshot) {
     var help by mutableStateOf<Help?>(null)
     var showMap by mutableStateOf(false)
     var showSettings by mutableStateOf(false)
+    var widgetSizes by mutableStateOf(false)
+    var widgetPage by mutableStateOf(false)
     var failed by mutableStateOf(false)
     var query by mutableStateOf("")
     var searchMode by mutableStateOf(SearchMode.Route)
@@ -127,6 +130,7 @@ class AppModel(initial: Snapshot) {
             launch { refreshFavEtas() }
             launch { enrichCoords() }
             pullLocation()
+            launch(Dispatchers.IO) { com.wusper.eta.widget.EtaWidgets.refreshAll(ctx) }
         }
     }
 
@@ -134,6 +138,8 @@ class AppModel(initial: Snapshot) {
         tab = next
         showMap = false
         showSettings = false
+        widgetPage = false
+        widgetSizes = false
         if (next == Tab.Saved) refreshFavEtas()
         persist()
     }
@@ -141,10 +147,12 @@ class AppModel(initial: Snapshot) {
     fun openSettings() {
         showSettings = true
         showMap = false
+        widgetSizes = false
     }
 
     fun closeSettings() {
         showSettings = false
+        widgetPage = false
     }
 
     fun openMap() {
@@ -247,6 +255,11 @@ class AppModel(initial: Snapshot) {
         detailReady = false
         showSettings = false
         showMap = false
+        widgetPage = false
+        app?.let { ctx ->
+            RouteUsage.record(ctx, focus.asUsage())
+            scope.launch(Dispatchers.IO) { com.wusper.eta.widget.EtaWidgets.refreshAll(ctx) }
+        }
         detailJob?.cancel()
         detailJob = scope.launch {
             when (focus) {
@@ -254,6 +267,38 @@ class AppModel(initial: Snapshot) {
                 is RouteFocus.Mtr -> loadMtrDetail(focus, token)
             }
         }
+    }
+
+    fun openWidget(intent: Intent?) {
+        val marker = intent?.getStringExtra(com.wusper.eta.widget.EtaWidgets.EXTRA) ?: return
+        if (marker.isBlank()) return
+        val line = intent.getStringExtra("line").orEmpty()
+        val focus = if (line.isNotBlank()) {
+            RouteFocus.Mtr(
+                line,
+                intent.getStringExtra("title").orEmpty().ifBlank { line },
+                intent.getStringExtra("side").orEmpty().ifBlank { "up" },
+            )
+        } else {
+            val code = intent.getStringExtra("route").orEmpty()
+            if (code.isBlank()) return
+            RouteFocus.Bus(
+                Route(
+                    co = intent.getStringExtra("co").orEmpty(),
+                    route = code,
+                    dir = intent.getStringExtra("dir").orEmpty(),
+                    serviceType = intent.getStringExtra("st").orEmpty().ifBlank { "1" },
+                    dest = intent.getStringExtra("dest").orEmpty(),
+                    stopId = intent.getStringExtra("sid").orEmpty(),
+                    routeId = intent.getStringExtra("rid").orEmpty(),
+                    region = intent.getStringExtra("region").orEmpty(),
+                    state = EtaState.Loading,
+                    etas = emptyList(),
+                ),
+            )
+        }
+        tab = if (line.isNotBlank()) Tab.Mtr else Tab.Bus
+        openDetail(focus)
     }
 
     fun closeDetail() {

@@ -79,6 +79,17 @@
     <string name="nav_gmb">小巴</string>
     <string name="nav_rail">铁路</string>
     <string name="nav_walk_min">步行 %1$d 分钟</string>
+    <string name="widget_add">新增桌面组件</string>
+    <string name="widget_1x1">1×1</string>
+    <string name="widget_1x2">1×2</string>
+    <string name="widget_2x2">2×2</string>
+    <string name="widget_section">桌面组件</string>
+    <string name="widget_auto">自动</string>
+    <string name="widget_nearest">最近</string>
+    <string name="help_widget_auto_t">自动</string>
+    <string name="help_widget_auto_b">收藏里最常看的路线。没有收藏就用最常看的路线。</string>
+    <string name="help_widget_pin_t">桌面</string>
+    <string name="help_widget_pin_b">这个桌面不能从这里钉选。</string>
     <string name="cd_here_origin">用目前位置作出发</string>
     <string name="cd_here_dest">用目前位置作目的地</string>
     <string name="cd_retry">重试</string>

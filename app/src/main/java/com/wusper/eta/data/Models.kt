@@ -9,7 +9,7 @@ enum class Filter { All, Kmb, Ctb, Gmb, Mtr }
 enum class EtaState { Loading, Ready, Failed }
 
 enum class Help {
-    Nearby, Gmb, Scheduled, None, MtrSide, Service, Minutes, Mock, Schematic, MtrGeo, A11y,
+    Nearby, Gmb, Scheduled, None, MtrSide, Service, Minutes, Mock, Schematic, MtrGeo, A11y, WidgetAuto, WidgetPin,
 }
 
 data class EtaSlot(val minutes: Int?, val scheduled: Boolean)

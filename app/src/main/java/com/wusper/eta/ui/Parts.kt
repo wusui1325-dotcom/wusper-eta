@@ -286,6 +286,8 @@ fun HelpSheet(topic: Help, onClose: () -> Unit) {
             Help.Schematic -> R.string.help_map_t
             Help.MtrGeo -> R.string.help_geo_t
             Help.A11y -> R.string.help_a11y_t
+            Help.WidgetAuto -> R.string.help_widget_auto_t
+            Help.WidgetPin -> R.string.help_widget_pin_t
         },
     )
     val body = stringResource(
@@ -301,6 +303,8 @@ fun HelpSheet(topic: Help, onClose: () -> Unit) {
             Help.Schematic -> R.string.help_map_b
             Help.MtrGeo -> R.string.help_geo_b
             Help.A11y -> R.string.help_a11y_b
+            Help.WidgetAuto -> R.string.help_widget_auto_b
+            Help.WidgetPin -> R.string.help_widget_pin_b
         },
     )
     Box(

@@ -40,6 +40,10 @@ fun SettingsPane(model: AppModel) {
         if (granted) model.locateGranted()
     }
     val lang = UiPrefs.language(context)
+    if (model.widgetPage) {
+        WidgetAdminPane(model)
+        return
+    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier
@@ -92,6 +96,12 @@ fun SettingsPane(model: AppModel) {
             InkButton(Glyphs.map, stringResource(R.string.label_map), label = stringResource(R.string.label_map)) {
                 model.closeSettings()
                 model.openMap()
+            }
+            Spacer(Modifier.height(16.dp))
+            Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+            Spacer(Modifier.height(16.dp))
+            InkButton(Glyphs.all, stringResource(R.string.widget_section), label = stringResource(R.string.widget_section)) {
+                model.widgetPage = true
             }
         }
     }

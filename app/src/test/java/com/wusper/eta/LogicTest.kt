@@ -17,6 +17,8 @@ import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.mtrLineOrder
 import com.wusper.eta.data.Stop
+import com.wusper.eta.data.FavRoute
+import com.wusper.eta.data.chooseWidgetRoute
 import com.wusper.eta.data.exitLabel
 import com.wusper.eta.data.minuteSpan
 import com.wusper.eta.data.stationHits
@@ -158,6 +160,25 @@ class LogicTest {
             .inStopOrder { it.first }
             .map { it.first }
         assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), ordered)
+    }
+
+    @Test
+    fun widgetDefaultsToFrequentFavorite() {
+        val fav = FavRoute(id = "a", title = "71K", dest = "太和", stopName = "")
+        val other = FavRoute(id = "b", title = "72", dest = "大埔", stopName = "")
+        val picked = chooseWidgetRoute(
+            favorites = listOf(fav, other),
+            usage = listOf(fav to 1, other to 9),
+            last = null,
+            nearby = null,
+        )
+        assertEquals("72", picked?.title)
+        val fresh = chooseWidgetRoute(listOf(fav, other), emptyList(), null, null)
+        assertEquals("71K", fresh?.title)
+        val overall = chooseWidgetRoute(emptyList(), listOf(other to 4), fav, null)
+        assertEquals("72", overall?.title)
+        val fallback = chooseWidgetRoute(emptyList(), emptyList(), null, fav)
+        assertEquals("71K", fallback?.title)
     }
 
     @Test

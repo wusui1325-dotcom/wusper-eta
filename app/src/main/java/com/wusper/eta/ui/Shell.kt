@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -92,6 +93,7 @@ fun Root(model: AppModel) {
                 RouteDetailPane(model, Modifier.weight(1f))
             } else {
                 TopBar(model)
+                if (model.widgetSizes) WidgetSizeRow { model.widgetSizes = false }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     when {
                         model.showSettings -> SettingsPane(model)
@@ -108,10 +110,12 @@ fun Root(model: AppModel) {
         val help = model.help
         if (help != null) HelpSheet(help) { model.help = null }
     }
-    BackHandler(enabled = model.help != null || model.detail != null || model.showSettings || model.showMap) {
+    BackHandler(enabled = model.help != null || model.detail != null || model.widgetSizes || model.widgetPage || model.showSettings || model.showMap) {
         when {
             model.help != null -> model.help = null
             model.detail != null -> model.closeDetail()
+            model.widgetSizes -> model.widgetSizes = false
+            model.widgetPage -> model.widgetPage = false
             model.showSettings -> model.closeSettings()
             model.showMap -> model.closeMap()
         }
@@ -126,7 +130,17 @@ private fun TopBar(model: AppModel) {
             .padding(start = 28.dp, end = 12.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        BasicText("Wusper ETA", style = Ink.title, modifier = Modifier.weight(1f))
+        BasicText("Wusper ETA", style = Ink.title)
+        InkButton(
+            Glyphs.all,
+            stringResource(R.string.widget_add),
+            selected = model.widgetSizes,
+            label = stringResource(R.string.widget_add),
+        ) { model.widgetSizes = !model.widgetSizes }
+        if (!com.wusper.eta.widget.EtaWidgets.pinSupported(LocalContext.current)) {
+            HelpMark { model.help = com.wusper.eta.data.Help.WidgetPin }
+        }
+        Spacer(Modifier.weight(1f))
         if (model.showSettings) {
             InkButton(Glyphs.close, stringResource(R.string.cd_close), label = stringResource(R.string.cd_close)) {
                 model.closeSettings()

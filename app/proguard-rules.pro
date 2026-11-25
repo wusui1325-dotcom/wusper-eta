@@ -4,6 +4,10 @@
     public static final ** CREATOR;
 }
 
+-keep class com.wusper.eta.widget.EtaWidgetTiny { *; }
+-keep class com.wusper.eta.widget.EtaWidgetTall { *; }
+-keep class com.wusper.eta.widget.EtaWidgetSquare { *; }
+
 -keep class com.google.android.gms.maps.MapView { *; }
 -keep class com.google.android.gms.maps.GoogleMap { *; }
 -keep class com.google.android.gms.maps.MapFragment { *; }
