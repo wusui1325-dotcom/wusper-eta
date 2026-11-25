@@ -26,7 +26,8 @@
     <string name="up">上行</string>
     <string name="down">下行</string>
     <string name="none">暂无</string>
-    <string name="demo">示范</string>
+    <string name="plan_none">未能规划</string>
+    <string name="minutes_n">%1$d 分钟</string>
     <string name="fail">连线失败</string>
     <string name="walk">步行</string>
     <string name="transit">公交</string>
@@ -94,10 +95,10 @@
     <string name="help_svc_b">九巴服务类型。同一路线编号可有不同走线。</string>
     <string name="help_min_t">分钟</string>
     <string name="help_min_b">由官方预计到站换算。三分钟内先显示上次结果，并立即更新。</string>
-    <string name="help_mock_t">示范</string>
-    <string name="help_mock_b">未设定 Google Routes 密钥。这是直线距离，不是步行路径或转乘方案。</string>
+    <string name="help_mock_t">未能规划</string>
+    <string name="help_mock_b">没有步行或换乘路径。</string>
     <string name="help_map_t">地图</string>
-    <string name="help_map_b">未设定 Maps 密钥，或装置没有 Google Play 服务。这是站点位置示意，不是 Google 地图。</string>
+    <string name="help_map_b">这是站点位置示意，不是地图。</string>
     <string name="help_geo_t">港铁距离</string>
     <string name="help_geo_b">距离用车站出口坐标估算，不是月台位置。</string>
 </resources>

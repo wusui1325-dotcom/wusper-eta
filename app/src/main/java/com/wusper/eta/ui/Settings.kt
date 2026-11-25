@@ -23,6 +23,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.wusper.eta.R
@@ -45,44 +48,22 @@ fun SettingsPane(model: AppModel) {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 28.dp),
         ) {
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BasicText(stringResource(R.string.settings), style = Ink.display, modifier = Modifier.weight(1f))
-            }
-            Spacer(Modifier.height(20.dp))
-            InkButton(Glyphs.locate, stringResource(R.string.label_locate), label = stringResource(R.string.label_locate)) {
-                if (model.permitted(context)) model.locateGranted() else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                model.closeSettings()
-            }
-            InkButton(Glyphs.map, stringResource(R.string.label_map), label = stringResource(R.string.label_map)) {
-                model.closeSettings()
-                model.openMap()
-            }
-            Spacer(Modifier.height(28.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Glyph(Glyphs.language, null, Ink.black, 18.dp)
-                Spacer(Modifier.width(8.dp))
-                BasicText(stringResource(R.string.language), style = Ink.title)
-            }
             Spacer(Modifier.height(8.dp))
-            LanguageChoice(Glyphs.language, "簡体中文", lang == UiPrefs.HANS) {
-                applyLanguage(context, UiPrefs.HANS)
-            }
-            LanguageChoice(Glyphs.language, "繁體中文", lang == UiPrefs.HANT) {
-                applyLanguage(context, UiPrefs.HANT)
-            }
-            LanguageChoice(Glyphs.language, "English", lang == UiPrefs.EN) {
-                applyLanguage(context, UiPrefs.EN)
-            }
-            Spacer(Modifier.height(28.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Glyph(Glyphs.a11y, null, Ink.black, 18.dp)
-                Spacer(Modifier.width(8.dp))
-                BasicText(stringResource(R.string.a11y), style = Ink.title)
-                Spacer(Modifier.width(6.dp))
-                HelpMark { model.help = Help.A11y }
-            }
-            Spacer(Modifier.height(8.dp))
+            Image(
+                painter = painterResource(R.drawable.ic_logo_lockup),
+                contentDescription = "Wusper ETA",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().height(96.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            SectionLabel(Glyphs.language, stringResource(R.string.language), null)
+            LanguageChoice("繁體中文", lang == UiPrefs.HANT) { applyLanguage(context, UiPrefs.HANT) }
+            LanguageChoice("簡体中文", lang == UiPrefs.HANS) { applyLanguage(context, UiPrefs.HANS) }
+            LanguageChoice("English", lang == UiPrefs.EN) { applyLanguage(context, UiPrefs.EN) }
+            Spacer(Modifier.height(16.dp))
+            Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+            Spacer(Modifier.height(16.dp))
+            SectionLabel(Glyphs.a11y, stringResource(R.string.a11y)) { model.help = Help.A11y }
             InkButton(
                 Glyphs.largeType,
                 stringResource(R.string.a11y_large),
@@ -101,15 +82,38 @@ fun SettingsPane(model: AppModel) {
                 selected = Ink.reduceMotion,
                 label = stringResource(R.string.a11y_motion),
             ) { UiPrefs.setReduceMotion(context, !Ink.reduceMotion) }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(16.dp))
             Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+            Spacer(Modifier.height(16.dp))
+            InkButton(Glyphs.locate, stringResource(R.string.label_locate), label = stringResource(R.string.label_locate)) {
+                if (model.permitted(context)) model.locateGranted() else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                model.closeSettings()
+            }
+            InkButton(Glyphs.map, stringResource(R.string.label_map), label = stringResource(R.string.label_map)) {
+                model.closeSettings()
+                model.openMap()
+            }
         }
     }
 }
 
 @Composable
-private fun LanguageChoice(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-    InkButton(icon, label, selected = selected, label = label, onClick = onClick)
+private fun SectionLabel(icon: ImageVector, label: String, onHelp: (() -> Unit)?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Glyph(icon, null, Ink.black, 18.dp)
+        Spacer(Modifier.width(8.dp))
+        BasicText(label, style = Ink.title)
+        if (onHelp != null) {
+            Spacer(Modifier.width(6.dp))
+            HelpMark(onHelp)
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun LanguageChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    InkButton(Glyphs.language, label, selected = selected, label = label, onClick = onClick)
 }
 
 private fun applyLanguage(context: android.content.Context, tag: String) {

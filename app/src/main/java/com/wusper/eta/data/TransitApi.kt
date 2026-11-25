@@ -396,6 +396,78 @@ class TransitApi {
         return out.sortedWith(compareBy({ routeRank(it.route) }, { it.route }))
     }
 
+    suspend fun computeRoute(origin: Place, dest: Place, mode: String): TripPlan? = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("origin", endpoint(origin))
+            .put("destination", endpoint(dest))
+            .put("mode", if (mode == "walk") "walk" else "transit")
+        val text = try {
+            post("$WUSPER/compute-routes", body.toString())
+        } catch (_: Exception) {
+            return@withContext null
+        }
+        val root = try {
+            JSONObject(text)
+        } catch (_: Exception) {
+            return@withContext null
+        }
+        if (!root.optBoolean("ok")) return@withContext null
+        val minutes = (root.optDouble("duration_s", 0.0) / 60.0).toInt().coerceAtLeast(0)
+        val meters = root.optInt("distance_m", root.optDouble("distance_m", 0.0).toInt())
+        val steps = buildList {
+            val arr = root.optJSONArray("steps") ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val step = arr.optJSONObject(i) ?: continue
+                val type = step.optString("type")
+                val instruction = step.optString("instruction")
+                val route = step.optString("route")
+                val towards = step.optString("towards")
+                val stepMin = (step.optDouble("duration_s", 0.0) / 60.0).toInt().coerceAtLeast(0)
+                val ride = type == "transit"
+                val title = if (ride && route.isNotBlank()) {
+                    if (towards.isNotBlank()) "$route 往 $towards" else route
+                } else {
+                    instruction.ifBlank { if (ride) "乘車" else "步行" }
+                }
+                add(PlanStep(if (ride) "transit" else "walk", title, if (ride) instruction else "", stepMin))
+            }
+        }
+        TripPlan(false, minutes, meters, steps, "")
+    }
+
+    private fun endpoint(place: Place): JSONObject {
+        return if (place.lat != 0.0 || place.lng != 0.0) {
+            JSONObject().put("lat", place.lat).put("lng", place.lng)
+        } else {
+            JSONObject().put("query", place.name)
+        }
+    }
+
+    private fun post(url: String, json: String): String {
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 4000
+            readTimeout = 8000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 14; WusperETA) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+            )
+        }
+        try {
+            conn.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) error("HTTP $code")
+            return body
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun get(url: String, gmb: Boolean = false): String {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 2500

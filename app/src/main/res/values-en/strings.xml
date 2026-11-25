@@ -26,7 +26,8 @@
     <string name="up">Up</string>
     <string name="down">Down</string>
     <string name="none">None</string>
-    <string name="demo">Sample</string>
+    <string name="plan_none">No route</string>
+    <string name="minutes_n">%1$d min</string>
     <string name="fail">Offline</string>
     <string name="walk">Walk</string>
     <string name="transit">Transit</string>
@@ -94,10 +95,10 @@
     <string name="help_svc_b">KMB service type. The same route number can follow a different path.</string>
     <string name="help_min_t">Minutes</string>
     <string name="help_min_b">Converted from the official arrival time. A result from the last three minutes is shown first, then updated.</string>
-    <string name="help_mock_t">Sample</string>
-    <string name="help_mock_b">No Google Routes key is set. This is straight-line distance, not a walking path or a transit plan.</string>
+    <string name="help_mock_t">No route</string>
+    <string name="help_mock_b">No walking or transit path.</string>
     <string name="help_map_t">Map</string>
-    <string name="help_map_b">No Maps key is set, or this device has no Google Play services. This is a sketch of stop positions, not Google Maps.</string>
+    <string name="help_map_b">This is a sketch of stop positions, not a map.</string>
     <string name="help_geo_t">MTR distance</string>
     <string name="help_geo_b">Distance uses station-exit coordinates, not the platform.</string>
 </resources>

@@ -59,11 +59,42 @@ private data class Arrival(
     val help: Help?,
     val flip: Flip?,
     val focus: RouteFocus?,
+    val meters: Int,
 )
 
 private sealed class Flip {
     data class Bus(val route: Route) : Flip()
     data class Mtr(val sta: String, val line: String) : Flip()
+}
+
+@Composable
+fun FavoriteRoutes(model: AppModel) {
+    val rows = remember(model.savedRoutes, model.favEta) {
+        model.savedRoutes.map { fav ->
+            val slots = model.favEta[fav.id]
+            Arrival(
+                key = fav.id,
+                route = fav.title,
+                dest = fav.dest,
+                stop = fav.stopName,
+                state = if (slots == null) EtaState.Loading else EtaState.Ready,
+                etas = slots.orEmpty(),
+                help = null,
+                flip = null,
+                focus = if (fav.line.isNotBlank()) {
+                    RouteFocus.Mtr(fav.line, fav.title, fav.side)
+                } else {
+                    RouteFocus.Bus(fav.asRoute())
+                },
+                meters = 0,
+            )
+        }.byLiveEtaThenDistance()
+    }
+    ArrivalColumn {
+        items(rows, key = { it.key }) { row ->
+            ArrivalLine(row, {}, {}) { row.focus?.let { model.openDetail(it) } }
+        }
+    }
 }
 
 @Composable
@@ -128,6 +159,7 @@ private fun busArrivals(
         .filter { it.co != "MTR" && it.routes.isNotEmpty() }
         .sortedBy { distanceOf(it.lat, it.lng, it.meters, lat, lng) }
     return ranked.flatMap { stop ->
+        val meters = distanceOf(stop.lat, stop.lng, stop.meters, lat, lng)
         stop.routes.map { route ->
             val hit = shown[route.key]
             Arrival(
@@ -144,9 +176,10 @@ private fun busArrivals(
                 },
                 flip = Flip.Bus(route),
                 focus = RouteFocus.Bus(hit?.asRoute() ?: route),
+                meters = meters,
             )
         }
-    }
+    }.byLiveEtaThenDistance()
 }
 
 private fun distanceOf(lat: Double, lng: Double, fallback: Int, userLat: Double, userLng: Double): Int {
@@ -163,6 +196,7 @@ private fun mtrArrivals(
     sides: Map<String, String>,
 ): List<Arrival> {
     return stations.sortedBy { distanceOf(it.lat, it.lng, it.meters, lat, lng) }.flatMap { station ->
+        val meters = distanceOf(station.lat, station.lng, station.meters, lat, lng)
         if (station.lines.isEmpty()) {
             listOf(
                 Arrival(
@@ -175,15 +209,16 @@ private fun mtrArrivals(
                     help = null,
                     flip = null,
                     focus = null,
+                    meters = meters,
                 ),
             )
         } else {
-            station.lines.map { line -> mtrLine(station.sta, station.name, line, sides) }
+            station.lines.map { line -> mtrLine(station.sta, station.name, line, sides, meters) }
         }
-    }
+    }.byLiveEtaThenDistance()
 }
 
-private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String, String>): Arrival {
+private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String, String>, meters: Int): Arrival {
     val preferred = com.wusper.eta.data.preferredMtrSide(line.up, line.down)
     var side = sides["$sta|${line.code}"] ?: com.wusper.eta.data.usefulMtrSide(line.code, sta, preferred)
     var trains = if (side == "down") line.down else line.up
@@ -208,8 +243,15 @@ private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String,
         help = null,
         flip = Flip.Mtr(sta, line.code),
         focus = RouteFocus.Mtr(line.code, line.name, side),
+        meters = meters,
     )
 }
+
+private fun List<Arrival>.byLiveEtaThenDistance(): List<Arrival> =
+    sortedWith(compareBy({ if (it.noDeparture) 1 else 0 }, { it.meters }))
+
+private val Arrival.noDeparture: Boolean
+    get() = state == EtaState.Ready && etas.none { it.minutes != null }
 
 @Composable
 private fun ArrivalColumn(content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {

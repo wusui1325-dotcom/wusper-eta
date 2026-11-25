@@ -27,7 +27,6 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         buildConfigField("String", "MAPS_API_KEY", "\"${prop("MAPS_API_KEY")}\"")
-        buildConfigField("String", "ROUTES_API_KEY", "\"${prop("ROUTES_API_KEY")}\"")
         manifestPlaceholders["MAPS_API_KEY"] = localProps.getProperty("MAPS_API_KEY") ?: ""
     }
 

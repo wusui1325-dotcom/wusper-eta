@@ -26,7 +26,7 @@
 
 ```bash
 cp local.properties.example local.properties
-# 編輯 sdk.dir、MAPS_API_KEY、ROUTES_API_KEY
+# 編輯 sdk.dir、MAPS_API_KEY
 ./gradlew :app:assembleDebug
 ```
 
@@ -57,7 +57,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | 欄位 | 用途 |
 | --- | --- |
 | `MAPS_API_KEY` | Maps SDK for Android。限制套件 `com.wusper.eta` 與簽署憑證 SHA-1 |
-| `ROUTES_API_KEY` | Routes API。這是裝置發出的 HTTPS，Android 應用限制套用不上。請只開放 Routes API |
 
 Debug 憑證 SHA-1：
 
@@ -65,13 +64,13 @@ Debug 憑證 SHA-1：
 keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
 ```
 
-沒有 Maps 金鑰時，地圖頁是黑白站點示意。沒有 Routes 金鑰時，行程結果標為「示範」。
+沒有 Maps 金鑰時，地圖頁是站點示意。行程由 `https://wusper.com/api/eta/compute-routes` 規劃，應用程式不內建 Routes 金鑰。沒有路徑時只顯示「未能規劃」。
 
 ## 資料
 
 | 資料 | 來源 |
 | --- | --- |
-| 附近路線、搜尋、沿線站 | `https://wusper.com/api/eta/` |
+| 附近路線、搜尋、沿線站、行程 | `https://wusper.com/api/eta/` |
 | 九巴到站 | `https://data.etabus.gov.hk/v1/transport/kmb/` |
 | 城巴到站 | `https://rt.data.gov.hk/v2/transport/citybus/` |
 | 專線小巴到站 | `https://data.etagmb.gov.hk/` |
@@ -97,4 +96,4 @@ cp local.properties.example local.properties
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-`MAPS_API_KEY` is the Android Maps SDK key (package `com.wusper.eta` plus your SHA-1). `ROUTES_API_KEY` is a Routes API key used from the device over HTTPS; restrict it to the Routes API. Leave either blank to use the on-device fallback: a monochrome stop sketch, or a straight-line distance marked 示範. There is no account system.
+`MAPS_API_KEY` is the Android Maps SDK key (package `com.wusper.eta` plus your SHA-1). Trip planning calls `https://wusper.com/api/eta/compute-routes`. The app does not embed a Routes key. There is no account system.

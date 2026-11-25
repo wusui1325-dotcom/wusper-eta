@@ -54,6 +54,7 @@ class AppModel(initial: Snapshot) {
     var planMode by mutableStateOf(initial.planMode)
     var plan by mutableStateOf(initial.plan)
     var planFailed by mutableStateOf(false)
+    var planUnavailable by mutableStateOf(false)
     var planPick by mutableStateOf("")
     var planHits by mutableStateOf<List<Place>>(emptyList())
     var bounds by mutableStateOf<List<BoundHit>>(emptyList())
@@ -68,6 +69,8 @@ class AppModel(initial: Snapshot) {
     var detailTransfers by mutableStateOf<Map<String, List<String>>>(emptyMap())
     var detailRest by mutableStateOf<Map<String, List<EtaSlot>>>(emptyMap())
     var routeFav by mutableStateOf<Set<String>>(emptySet())
+    var savedRoutes by mutableStateOf<List<FavRoute>>(emptyList())
+    var favEta by mutableStateOf<Map<String, List<EtaSlot>>>(emptyMap())
     var detailReady by mutableStateOf(false)
 
     var bootAt: Long = SystemClock.elapsedRealtime()
@@ -100,12 +103,14 @@ class AppModel(initial: Snapshot) {
         started = true
         app = context.applicationContext
         routeFav = UiPrefs.routeFavorites(app!!)
+        savedRoutes = UiPrefs.savedRoutes(app!!)
         scope.launch {
             val ctx = app ?: return@launch
             val indexJob = async(Dispatchers.IO) { MtrIndex.load(ctx) }
             launch { refreshVisibleEtas() }
             index = indexJob.await()
             launch { refreshMtr() }
+            launch { refreshFavEtas() }
             launch { enrichCoords() }
             pullLocation()
             delay(3_000)
@@ -120,6 +125,7 @@ class AppModel(initial: Snapshot) {
         tab = next
         showMap = false
         showSettings = false
+        if (next == Tab.Saved) refreshFavEtas()
         persist()
     }
 
@@ -300,10 +306,82 @@ class AppModel(initial: Snapshot) {
     }
 
     fun toggleRouteFav() {
-        val id = detail?.favId ?: return
+        val focus = detail ?: return
         val ctx = app ?: return
-        routeFav = if (id in routeFav) routeFav - id else routeFav + id
+        val id = focus.favId
+        if (id in routeFav) {
+            routeFav = routeFav - id
+            savedRoutes = savedRoutes.filterNot { it.id == id }
+            favEta = favEta - id
+        } else {
+            val row = rememberFav(focus)
+            routeFav = routeFav + id
+            savedRoutes = listOf(row) + savedRoutes.filterNot { it.id == id }
+            refreshFavEtas()
+        }
         UiPrefs.setRouteFavorites(ctx, routeFav)
+        UiPrefs.setSavedRoutes(ctx, savedRoutes)
+    }
+
+    private fun rememberFav(focus: RouteFocus): FavRoute {
+        val nearest = detailStops.minByOrNull { stop ->
+            if (stop.lat == 0.0 || lat == 0.0) Double.MAX_VALUE
+            else haversineMeters(lat, lng, stop.lat, stop.lng)
+        }
+        return when (focus) {
+            is RouteFocus.Bus -> FavRoute(
+                id = focus.favId,
+                title = focus.route.route,
+                dest = focus.route.dest,
+                stopName = nearest?.name ?: focus.route.stopId,
+                co = focus.route.co,
+                route = focus.route.route,
+                dir = focus.route.dir,
+                serviceType = focus.route.serviceType,
+                routeId = focus.route.routeId,
+                region = focus.route.region,
+                stopId = nearest?.id ?: focus.route.stopId,
+            )
+            is RouteFocus.Mtr -> {
+                val station = index?.onLine(focus.code)?.minByOrNull { item ->
+                    if (lat == 0.0) Double.MAX_VALUE else haversineMeters(lat, lng, item.lat, item.lng)
+                }
+                FavRoute(
+                    id = focus.favId,
+                    title = focus.name,
+                    dest = "",
+                    stopName = station?.name ?: nearest?.name.orEmpty(),
+                    stopId = station?.sta ?: nearest?.id.orEmpty(),
+                    line = focus.code,
+                    side = focus.side,
+                )
+            }
+        }
+    }
+
+    private fun refreshFavEtas() {
+        val rows = savedRoutes
+        val idx = index
+        rows.forEach { row ->
+            scope.launch(Dispatchers.IO) {
+                val slots = try {
+                    if (row.line.isNotBlank() && row.stopId.isNotBlank() && idx != null) {
+                        val pair = api.mtr(row.line, row.stopId, idx::name)
+                        val trains = if (row.side == "down") pair.second else pair.first
+                        trains.map { EtaSlot(it.minutes, it.scheduled) }
+                    } else if (row.route.isNotBlank() && row.stopId.isNotBlank()) {
+                        api.live(row.asRoute())
+                    } else {
+                        null
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+                if (slots != null) {
+                    withContext(Dispatchers.Main) { favEta = favEta + (row.id to slots) }
+                }
+            }
+        }
     }
 
     private suspend fun loadBusDetail(route: Route, token: Int) {
@@ -604,18 +682,24 @@ class AppModel(initial: Snapshot) {
         val from = origin ?: return
         val to = dest ?: return
         planFailed = false
+        planUnavailable = false
+        plan = null
         planJob?.cancel()
         planJob = scope.launch {
             val result = try {
-                withContext(Dispatchers.IO) { Planner.plan(from, to, planMode) }
+                api.computeRoute(from, to, planMode)
             } catch (_: Exception) {
                 planFailed = true
                 null
             }
-            if (result != null) {
+            if (result != null && !result.mock) {
                 plan = result
                 planFailed = false
+                planUnavailable = false
                 persist()
+            } else if (!planFailed) {
+                plan = null
+                planUnavailable = true
             }
         }
     }

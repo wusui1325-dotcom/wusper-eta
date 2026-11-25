@@ -230,14 +230,17 @@ private fun NameRow(title: String, subtitle: String, onClick: () -> Unit) {
 
 @Composable
 fun SavedPane(model: AppModel) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        item { SectionPad(Glyphs.saved, stringResource(R.string.sec_fav)) }
-        items(model.fav, key = { "fv-${it.key}" }) { saved ->
-            SavedRow(saved) { model.openStop(saved.asStop()) }
+    Column(Modifier.fillMaxSize()) {
+        if (model.savedRoutes.isNotEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth()) { FavoriteRoutes(model) }
         }
-        item { SectionPad(Glyphs.recent, stringResource(R.string.sec_recent)) }
-        items(model.recent, key = { "rc-${it.key}" }) { saved ->
-            SavedRow(saved) { model.openStop(saved.asStop()) }
+        if (model.recent.isNotEmpty()) {
+            LazyColumn(Modifier.then(if (model.savedRoutes.isEmpty()) Modifier.weight(1f) else Modifier.heightIn(max = 240.dp))) {
+                item { SectionPad(Glyphs.recent, stringResource(R.string.sec_recent)) }
+                items(model.recent, key = { "rc-${it.key}" }) { saved ->
+                    SavedRow(saved) { model.openStop(saved.asStop()) }
+                }
+            }
         }
     }
 }
@@ -251,10 +254,10 @@ fun PlanPane(model: AppModel, part: PlanPart) {
             .padding(bottom = 16.dp),
     ) {
         if (part != PlanPart.Result) {
-            Bar(Glyphs.plan, stringResource(R.string.tab_plan), if (model.plan?.mock == true) Help.Mock else null, { model.help = it }) {
+            Bar(Glyphs.plan, stringResource(R.string.tab_plan), null, { model.help = it }) {
                 InkButton(Glyphs.go, stringResource(R.string.cd_go), label = stringResource(R.string.cd_go)) { model.runPlan() }
             }
-            Column(Modifier.padding(horizontal = 12.dp)) {
+            Column(Modifier.padding(horizontal = 28.dp)) {
                 PlaceEditor(Glyphs.hereOrigin, stringResource(R.string.origin), model.originText, model.planPick == "o", model.planHits, { model.editPlace("o", it) }, { model.pickPlace(it) })
                 Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     InkButton(Glyphs.hereOrigin, stringResource(R.string.cd_here_origin), label = stringResource(R.string.origin)) { model.useHere("o") }
@@ -273,14 +276,13 @@ fun PlanPane(model: AppModel, part: PlanPart) {
             }
         }
         if (part != PlanPart.Form) {
-            if (part == PlanPart.Result) {
-                Bar(Glyphs.result, stringResource(R.string.sec_hits), if (model.plan?.mock == true) Help.Mock else null, { model.help = it }) {}
-            }
-            val plan = model.plan
+            val plan = model.plan?.takeUnless { it.mock }
             if (model.planFailed) {
                 FailRow { model.runPlan() }
             } else if (plan != null) {
-                PlanResult(plan) { model.help = it }
+                PlanResult(plan)
+            } else if (model.planUnavailable || model.plan?.mock == true) {
+                PlanUnavailable { model.help = Help.Mock }
             }
         }
     }
@@ -320,44 +322,36 @@ private fun PlaceEditor(
 }
 
 @Composable
-private fun PlanResult(plan: TripPlan, onHelp: (Help) -> Unit) {
-    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (plan.mock) {
-                BasicText(stringResource(R.string.demo), style = Ink.title)
-                Spacer(Modifier.width(6.dp))
-                HelpMark { onHelp(Help.Mock) }
-                Spacer(Modifier.width(10.dp))
-            }
-            BasicText("${plan.minutes}′", style = Ink.minute)
-            Spacer(Modifier.width(10.dp))
-            BasicText(formatMeters(plan.meters), style = Ink.body)
+private fun PlanUnavailable(onHelp: () -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BasicText(stringResource(R.string.plan_none), style = Ink.title)
+        Spacer(Modifier.width(6.dp))
+        HelpMark(onHelp)
+    }
+}
+
+@Composable
+private fun PlanResult(plan: TripPlan) {
+    Column(Modifier.padding(horizontal = 28.dp, vertical = 12.dp)) {
+        BasicText(stringResource(R.string.minutes_n, plan.minutes), style = Ink.title)
+        if (plan.meters > 0) {
+            BasicText(formatMeters(plan.meters), style = Ink.meta)
         }
         plan.steps.forEach { step ->
-            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Glyph(if (step.mode == "transit") Glyphs.stepRide else Glyphs.stepWalk, null, Ink.black, 18.dp)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     BasicText(step.title, style = Ink.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (step.detail.isNotBlank()) BasicText(step.detail, style = Ink.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                BasicText("${step.minutes}′", style = Ink.small)
+                BasicText(stringResource(R.string.minutes_n, step.minutes), style = Ink.small)
             }
+            Box(Modifier.padding(top = 12.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
         }
-        if (plan.mock && plan.steps.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            StraightPreview()
-        }
-    }
-}
-
-@Composable
-private fun StraightPreview() {
-    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(72.dp).background(Ink.wash)) {
-        val y = size.height / 2f
-        drawLine(Ink.black, androidx.compose.ui.geometry.Offset(24f, y), androidx.compose.ui.geometry.Offset(size.width - 24f, y), strokeWidth = 2f)
-        drawCircle(Ink.black, 5f, androidx.compose.ui.geometry.Offset(24f, y))
-        drawRect(Ink.black, androidx.compose.ui.geometry.Offset(size.width - 30f, y - 5f), androidx.compose.ui.geometry.Size(10f, 10f))
     }
 }
 

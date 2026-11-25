@@ -90,6 +90,24 @@ data class MtrStop(
     val nameEn: String = "",
 )
 
+data class FavRoute(
+    val id: String,
+    val title: String,
+    val dest: String,
+    val stopName: String,
+    val co: String = "",
+    val route: String = "",
+    val dir: String = "",
+    val serviceType: String = "1",
+    val routeId: String = "",
+    val region: String = "",
+    val stopId: String = "",
+    val line: String = "",
+    val side: String = "",
+) {
+    fun asRoute(): Route = Route(co, route, dir, serviceType, dest, stopId, routeId, region, EtaState.Loading, emptyList())
+}
+
 data class SavedStop(
     val key: String,
     val co: String,
