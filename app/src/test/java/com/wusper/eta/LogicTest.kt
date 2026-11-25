@@ -1,0 +1,113 @@
+package com.wusper.eta
+
+import com.wusper.eta.data.BoundHit
+import com.wusper.eta.data.EtaState
+import com.wusper.eta.data.MtrTrain
+import com.wusper.eta.data.Route
+import com.wusper.eta.data.citybusOppositeDest
+import com.wusper.eta.data.decodePolyline
+import com.wusper.eta.data.haversineMeters
+import com.wusper.eta.data.isScheduledRemark
+import com.wusper.eta.data.matchesRouteQuery
+import com.wusper.eta.data.matchesStopName
+import com.wusper.eta.data.minutesUntil
+import com.wusper.eta.data.mtrLineOrder
+import com.wusper.eta.data.oppositeDir
+import com.wusper.eta.data.otherBound
+import com.wusper.eta.data.preferredMtrSide
+import java.time.Instant
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class LogicTest {
+    private fun hit(dir: String, dest: String, meters: Int) = BoundHit(
+        co = "KMB",
+        route = "101",
+        dir = dir,
+        serviceType = "1",
+        dest = dest,
+        stopId = "s$meters",
+        stopName = "站",
+        routeId = "",
+        region = "",
+        meters = meters,
+        lat = 0.0,
+        lng = 0.0,
+    )
+
+    @Test
+    fun minutesRoundToNearest() {
+        val now = Instant.parse("2026-11-25T02:00:00Z")
+        assertEquals(7, minutesUntil("2026-11-25T02:07:20Z", now))
+        assertEquals(0, minutesUntil("2026-11-25T01:59:40Z", now))
+        assertNull(minutesUntil("2026-11-25T01:50:00Z", now))
+        assertNull(minutesUntil(null, now))
+    }
+
+    @Test
+    fun scheduledRemarks() {
+        assertTrue(isScheduledRemark("預定班次"))
+        assertTrue(isScheduledRemark("未開出"))
+        assertTrue(isScheduledRemark("Scheduled"))
+        assertFalse(isScheduledRemark(""))
+        assertFalse(isScheduledRemark("客滿"))
+    }
+
+    @Test
+    fun haversineAbout111mPerThousandthDegree() {
+        val d = haversineMeters(22.28, 114.15, 22.281, 114.15)
+        assertTrue(d in 100.0..120.0)
+    }
+
+    @Test
+    fun stopSearchUsesNamesOnly() {
+        assertTrue(matchesStopName("中環", "中環街市", "CENTRAL MARKET"))
+        assertTrue(matchesStopName("admiralty", "金鐘站", "Admiralty Station"))
+        assertFalse(matchesStopName("001050", "歷山大廈", "Alexandra House"))
+        assertFalse(matchesStopName("A5BF", "置地廣場", "LANDMARK"))
+        assertFalse(matchesStopName("  ", "中環", "Central"))
+    }
+
+    @Test
+    fun routeSearchMatchesCodeOrDest() {
+        assertTrue(matchesRouteQuery("12A", "12A", "麥當勞道"))
+        assertTrue(matchesRouteQuery("北角", "10", "北角碼頭"))
+        assertFalse(matchesRouteQuery("001024", "12A", "麥當勞道"))
+    }
+
+    @Test
+    fun oppositeBoundIsNearestOtherDirection() {
+        val route = Route("KMB", "101", "O", "1", "堅尼地城", "A", "", "", EtaState.Loading, emptyList())
+        val far = hit("I", "觀塘(裕民坊)", 220)
+        val near = hit("I", "觀塘(裕民坊)", 80)
+        val same = hit("O", "堅尼地城", 12)
+        val picked = otherBound(listOf(far, same, near), route)
+        assertEquals("觀塘(裕民坊)", picked?.dest)
+        assertEquals(80, picked?.meters)
+        assertEquals("O", oppositeDir("I"))
+        assertEquals("2", oppositeDir("1"))
+        assertEquals("堅尼地城", citybusOppositeDest("O", "跑馬地 (上)", "堅尼地城", "跑馬地 (上)"))
+        assertEquals("down", preferredMtrSide(listOf(MtrTrain(6, "柴灣", false, "1")), listOf(MtrTrain(1, "堅尼地城", false, "2"))))
+    }
+
+    @Test
+    fun eastRailRunsAdmiraltyToLoWu() {
+        val order = mtrLineOrder("EAL")
+        assertEquals("ADM", order.first())
+        assertTrue(order.indexOf("ADM") < order.indexOf("TAW"))
+        assertTrue(order.indexOf("TAW") < order.indexOf("LOW"))
+        assertTrue(order.contains("LMC"))
+    }
+
+    @Test
+    fun polylineDecodesGoogleSample() {
+        val pts = decodePolyline("_p~iF~ps|U_ulLnnqC_mqNvxq`@")
+        assertEquals(3, pts.size)
+        assertEquals(38.5, pts[0].first, 0.01)
+        assertEquals(-120.2, pts[0].second, 0.01)
+        assertEquals(43.252, pts[2].first, 0.01)
+    }
+}

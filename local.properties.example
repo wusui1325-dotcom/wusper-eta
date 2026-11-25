@@ -1,0 +1,13 @@
+# Copy to local.properties. Do not commit real keys.
+sdk.dir=/path/to/Android/Sdk
+
+# Maps SDK for Android. Restrict the key to package com.wusper.eta
+# and your signing certificate SHA-1.
+# Debug SHA-1:
+#   keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -storepass android -keypass android
+MAPS_API_KEY=YOUR_ANDROID_RESTRICTED_MAPS_KEY
+
+# Routes API (Directions v2), called over HTTPS from the device.
+# Restrict this key to the Routes API only. An Android-app restriction
+# does not apply to this HTTP call.
+ROUTES_API_KEY=

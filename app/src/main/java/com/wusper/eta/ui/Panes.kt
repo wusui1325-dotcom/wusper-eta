@@ -1,0 +1,646 @@
+package com.wusper.eta.ui
+
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.wusper.eta.R
+import com.wusper.eta.data.AppModel
+import com.wusper.eta.data.Filter
+import com.wusper.eta.data.Help
+import com.wusper.eta.data.MtrLine
+import com.wusper.eta.data.MtrStop
+import com.wusper.eta.data.Place
+import com.wusper.eta.data.Route
+import com.wusper.eta.data.SavedStop
+import com.wusper.eta.data.Stop
+import com.wusper.eta.data.TripPlan
+import com.wusper.eta.data.accepts
+import com.wusper.eta.data.formatMeters
+import com.wusper.eta.data.toSaved
+
+enum class PlanPart { All, Form, Result }
+
+@Composable
+fun NearbyPane(model: AppModel, inline: Boolean) {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) model.locateGranted()
+    }
+    Column(Modifier.fillMaxSize()) {
+        Bar(
+            icon = Glyphs.nearby,
+            title = stringResource(R.string.tab_nearby),
+            help = Help.Nearby,
+            onHelp = { model.help = it },
+        ) {
+            InkButton(Glyphs.locate, stringResource(R.string.cd_locate)) {
+                if (model.permitted(context)) model.locateGranted() else permission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+            Spacer(Modifier.width(6.dp))
+            InkButton(Glyphs.radiusIn, stringResource(R.string.cd_radius_in)) { model.radiusIn() }
+            Spacer(Modifier.width(6.dp))
+            InkButton(Glyphs.radiusOut, stringResource(R.string.cd_radius_out)) { model.radiusOut() }
+            Spacer(Modifier.width(6.dp))
+            InkButton(Glyphs.refresh, stringResource(R.string.cd_refresh)) { model.refresh() }
+        }
+        Filters(model)
+        val shown = visibleStops(model)
+        val open = shown.firstOrNull { it.key == model.openKey }
+        val rest = shown.filter { it.key != model.openKey }
+        val mtr = if (model.filter == Filter.All || model.filter == Filter.Mtr) model.mtr else emptyList()
+        LazyColumn(Modifier.weight(1f)) {
+            if (model.failed && shown.isEmpty()) {
+                item { FailRow { model.refresh() } }
+            }
+            if (inline && open != null) {
+                item(key = "board-${open.key}") { StopBoard(open, model, fav = true) }
+            }
+            if (inline) {
+                items(mtr, key = { "m-${it.sta}" }) { station -> MtrBoard(station) { model.help = it } }
+            } else {
+                items(mtr, key = { "mc-${it.sta}" }) { station ->
+                    CompactMtr(station) { model.openMtr(station) }
+                }
+            }
+            items(if (inline) rest else shown, key = { it.key }) { stop ->
+                CompactStop(stop, selected = stop.key == model.openKey) { model.open(stop.key) }
+            }
+        }
+    }
+}
+
+@Composable
+fun BoardPane(model: AppModel) {
+    val stop = model.openStop
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
+            Bar(Glyphs.stopPole, stop?.name ?: stringResource(R.string.sec_stops), Help.Minutes, { model.help = it }) {
+                if (stop != null) {
+                    val on = model.fav.any { it.key == stop.key }
+                    InkButton(if (on) Glyphs.favOn else Glyphs.saved, stringResource(if (on) R.string.cd_fav_on else R.string.cd_fav_off)) {
+                        model.toggleFav(stop)
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
+                InkButton(Glyphs.refresh, stringResource(R.string.cd_refresh)) { model.refresh() }
+            }
+        }
+        if (stop != null) {
+            item { StopBody(stop) { model.help = it } }
+        }
+        items(model.mtr, key = { "b-${it.sta}" }) { station -> MtrBoard(station) { model.help = it } }
+    }
+}
+
+@Composable
+fun SearchPane(model: AppModel) {
+    val routeMode = model.searchMode == com.wusper.eta.data.SearchMode.Route
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(start = 20.dp, end = 12.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            InkButton(
+                Glyphs.routeCol,
+                stringResource(R.string.search_route),
+                selected = routeMode,
+                label = stringResource(R.string.search_route),
+            ) { model.chooseSearch(com.wusper.eta.data.SearchMode.Route) }
+            Spacer(Modifier.width(8.dp))
+            InkButton(
+                Glyphs.stopPole,
+                stringResource(R.string.search_stop),
+                selected = !routeMode,
+                label = stringResource(R.string.search_stop),
+            ) { model.chooseSearch(com.wusper.eta.data.SearchMode.StopName) }
+            Spacer(Modifier.weight(1f))
+            if (model.query.isNotEmpty()) {
+                InkButton(Glyphs.clear, stringResource(R.string.cd_clear), label = stringResource(R.string.cd_clear)) {
+                    model.onQuery("")
+                }
+            }
+        }
+        Column(Modifier.padding(horizontal = 28.dp)) {
+            FieldLine(
+                model.query,
+                stringResource(if (routeMode) R.string.hint_route else R.string.hint_stop),
+            ) { model.onQuery(it) }
+        }
+        LazyColumn(Modifier.weight(1f).padding(horizontal = 28.dp)) {
+            if (routeMode) {
+                itemsIndexed(model.foundRoutes, key = { i, route -> "fr-$i-${route.co}-${route.route}-${route.dir}-${route.serviceType}" }) { _, route ->
+                    RouteHit(route) { model.openRoute(route) }
+                }
+                if (model.along.isNotEmpty()) {
+                    item {
+                        Row(Modifier.padding(top = 18.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Glyph(Glyphs.along, null, Ink.black, 16.dp)
+                            Spacer(Modifier.width(8.dp))
+                            BasicText(model.alongTitle.ifBlank { stringResource(R.string.sec_along) }, style = Ink.meta)
+                        }
+                    }
+                    items(model.along, key = { "al-${it.co}-${it.id}-${it.seq}" }) { stop ->
+                        NameRow(stop.name, "") {
+                            model.openStop(Stop("${stop.co}|${stop.id}", stop.co, stop.id, stop.name, 0, stop.lat, stop.lng, emptyList()))
+                        }
+                    }
+                }
+            } else {
+                items(model.foundStops, key = { "fs-${it.key}" }) { stop ->
+                    NameRow(stop.name, stop.nameEn) { model.openStop(stop) }
+                }
+                items(model.foundMtr, key = { "fm-${it.sta}" }) { station ->
+                    NameRow(station.name, station.nameEn) { model.openMtr(station) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NameRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(top = 14.dp),
+    ) {
+        BasicText(title, style = Ink.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (subtitle.isNotBlank() && !subtitle.equals(title, ignoreCase = true)) {
+            BasicText(subtitle, style = Ink.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Ink.line))
+    }
+}
+
+@Composable
+fun SavedPane(model: AppModel) {
+    LazyColumn(Modifier.fillMaxSize()) {
+        item { SectionPad(Glyphs.saved, stringResource(R.string.sec_fav)) }
+        items(model.fav, key = { "fv-${it.key}" }) { saved ->
+            SavedRow(saved) { model.openStop(saved.asStop()) }
+        }
+        item { SectionPad(Glyphs.recent, stringResource(R.string.sec_recent)) }
+        items(model.recent, key = { "rc-${it.key}" }) { saved ->
+            SavedRow(saved) { model.openStop(saved.asStop()) }
+        }
+    }
+}
+
+@Composable
+fun PlanPane(model: AppModel, part: PlanPart) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = 16.dp),
+    ) {
+        if (part != PlanPart.Result) {
+            Bar(Glyphs.plan, stringResource(R.string.tab_plan), if (model.plan?.mock == true) Help.Mock else null, { model.help = it }) {
+                InkButton(Glyphs.go, stringResource(R.string.cd_go), label = stringResource(R.string.cd_go)) { model.runPlan() }
+            }
+            Column(Modifier.padding(horizontal = 12.dp)) {
+                PlaceEditor(Glyphs.hereOrigin, stringResource(R.string.origin), model.originText, model.planPick == "o", model.planHits, { model.editPlace("o", it) }, { model.pickPlace(it) })
+                Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    InkButton(Glyphs.hereOrigin, stringResource(R.string.cd_here_origin), label = stringResource(R.string.origin)) { model.useHere("o") }
+                    Spacer(Modifier.width(8.dp))
+                    InkButton(Glyphs.swap, stringResource(R.string.cd_swap), label = stringResource(R.string.cd_swap)) { model.swapEnds() }
+                    Spacer(Modifier.width(8.dp))
+                    InkButton(Glyphs.hereDest, stringResource(R.string.cd_here_dest), label = stringResource(R.string.dest)) { model.useHere("d") }
+                }
+                PlaceEditor(Glyphs.hereDest, stringResource(R.string.dest), model.destText, model.planPick == "d", model.planHits, { model.editPlace("d", it) }, { model.pickPlace(it) })
+                Spacer(Modifier.height(10.dp))
+                Row {
+                    InkButton(Glyphs.stepWalk, stringResource(R.string.walk), model.planMode == "walk", label = stringResource(R.string.walk)) { model.setMode("walk") }
+                    Spacer(Modifier.width(8.dp))
+                    InkButton(Glyphs.stepRide, stringResource(R.string.transit), model.planMode == "transit", label = stringResource(R.string.transit)) { model.setMode("transit") }
+                }
+            }
+        }
+        if (part != PlanPart.Form) {
+            if (part == PlanPart.Result) {
+                Bar(Glyphs.result, stringResource(R.string.sec_hits), if (model.plan?.mock == true) Help.Mock else null, { model.help = it }) {}
+            }
+            val plan = model.plan
+            if (model.planFailed) {
+                FailRow { model.runPlan() }
+            } else if (plan != null) {
+                PlanResult(plan) { model.help = it }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaceEditor(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    active: Boolean,
+    hits: List<Place>,
+    onValue: (String) -> Unit,
+    onPick: (Place) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Glyph(icon, null, Ink.black, 16.dp)
+        Spacer(Modifier.width(6.dp))
+        BasicText(label, style = Ink.small)
+    }
+    FieldLine(value, label, onValue)
+    if (active) {
+        hits.forEach { place ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 40.dp)
+                    .clickable(remember { MutableInteractionSource() }, null) { onPick(place) }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BasicText(place.name, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Hair()
+        }
+    }
+}
+
+@Composable
+private fun PlanResult(plan: TripPlan, onHelp: (Help) -> Unit) {
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (plan.mock) {
+                BasicText(stringResource(R.string.demo), style = Ink.title)
+                Spacer(Modifier.width(6.dp))
+                HelpMark { onHelp(Help.Mock) }
+                Spacer(Modifier.width(10.dp))
+            }
+            BasicText("${plan.minutes}′", style = Ink.minute)
+            Spacer(Modifier.width(10.dp))
+            BasicText(formatMeters(plan.meters), style = Ink.body)
+        }
+        plan.steps.forEach { step ->
+            Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Glyph(if (step.mode == "transit") Glyphs.stepRide else Glyphs.stepWalk, null, Ink.black, 18.dp)
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    BasicText(step.title, style = Ink.body, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    if (step.detail.isNotBlank()) BasicText(step.detail, style = Ink.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                BasicText("${step.minutes}′", style = Ink.small)
+            }
+        }
+        if (plan.mock && plan.steps.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            StraightPreview()
+        }
+    }
+}
+
+@Composable
+private fun StraightPreview() {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxWidth().height(72.dp).background(Ink.wash)) {
+        val y = size.height / 2f
+        drawLine(Ink.black, androidx.compose.ui.geometry.Offset(24f, y), androidx.compose.ui.geometry.Offset(size.width - 24f, y), strokeWidth = 2f)
+        drawCircle(Ink.black, 5f, androidx.compose.ui.geometry.Offset(24f, y))
+        drawRect(Ink.black, androidx.compose.ui.geometry.Offset(size.width - 30f, y - 5f), androidx.compose.ui.geometry.Size(10f, 10f))
+    }
+}
+
+@Composable
+private fun Bar(
+    icon: ImageVector,
+    title: String,
+    help: Help?,
+    onHelp: (Help) -> Unit,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(icon, null, Ink.black, 18.dp)
+        Spacer(Modifier.width(8.dp))
+        BasicText(title, style = Ink.title, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (help != null) {
+            HelpMark { onHelp(help) }
+            Spacer(Modifier.width(6.dp))
+        }
+        actions()
+    }
+}
+
+@Composable
+private fun Filters(model: AppModel) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FilterChip(Glyphs.all, stringResource(R.string.op_all), model.filter == Filter.All, null, { model.choose(Filter.All) }) {}
+        FilterChip(Glyphs.kmb, stringResource(R.string.op_kmb), model.filter == Filter.Kmb, null, { model.choose(Filter.Kmb) }) {}
+        FilterChip(Glyphs.ctb, stringResource(R.string.op_ctb), model.filter == Filter.Ctb, null, { model.choose(Filter.Ctb) }) {}
+        FilterChip(Glyphs.gmb, stringResource(R.string.op_gmb), model.filter == Filter.Gmb, Help.Gmb, { model.choose(Filter.Gmb) }) { model.help = it }
+        FilterChip(Glyphs.mtr, stringResource(R.string.op_mtr), model.filter == Filter.Mtr, Help.MtrGeo, { model.choose(Filter.Mtr) }) { model.help = it }
+    }
+}
+
+@Composable
+private fun FilterChip(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    help: Help?,
+    onClick: () -> Unit,
+    onHelp: (Help) -> Unit,
+) {
+    val source = remember { MutableInteractionSource() }
+    Row(Modifier.padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier
+                .height(36.dp)
+                .background(if (selected) Ink.black else Ink.paper)
+                .border(1.dp, Ink.black)
+                .clickable(source, null, onClick = onClick)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Glyph(icon, label, if (selected) Ink.paper else Ink.black, 16.dp)
+            Spacer(Modifier.width(4.dp))
+            BasicText(label, style = if (selected) Ink.small.copy(color = Ink.paper) else Ink.small)
+        }
+        if (help != null) {
+            Spacer(Modifier.width(4.dp))
+            HelpMark { onHelp(help) }
+        }
+    }
+}
+
+@Composable
+private fun SectionPad(icon: ImageVector, title: String, help: Help? = null, onHelp: (Help) -> Unit = {}) {
+    Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        SectionHead(icon, title, help, onHelp)
+    }
+}
+
+@Composable
+private fun StopBoard(stop: Stop, model: AppModel, fav: Boolean) {
+    Column {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Glyph(Glyphs.stopPole, null, Ink.black, 18.dp)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                BasicText(stop.name, style = Ink.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Glyph(Glyphs.distance, null, Ink.mute, 14.dp)
+                    Spacer(Modifier.width(4.dp))
+                    BasicText(formatMeters(stop.meters), style = Ink.meta)
+                }
+            }
+            if (fav) {
+                val on = model.fav.any { it.key == stop.key }
+                InkButton(if (on) Glyphs.favOn else Glyphs.saved, stringResource(if (on) R.string.cd_fav_on else R.string.cd_fav_off)) {
+                    model.toggleFav(stop)
+                }
+                Spacer(Modifier.width(6.dp))
+            }
+            InkButton(Glyphs.mapPin, stringResource(R.string.cd_map_stop)) { model.openMap() }
+        }
+        StopBody(stop) { model.help = it }
+    }
+}
+
+@Composable
+private fun StopBody(stop: Stop, onHelp: (Help) -> Unit) {
+    var more by remember(stop.key) { mutableStateOf(false) }
+    val routes = if (more || stop.routes.size <= 6) stop.routes else stop.routes.take(6)
+    Column(Modifier.padding(horizontal = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(Glyphs.routeCol, null, Ink.mute, 14.dp)
+            Spacer(Modifier.width(4.dp))
+            BasicText(stringResource(R.string.col_route), style = Ink.meta)
+            Spacer(Modifier.width(12.dp))
+            Glyph(Glyphs.destCol, null, Ink.mute, 14.dp)
+            Spacer(Modifier.width(4.dp))
+            BasicText(stringResource(R.string.col_dest), style = Ink.meta)
+            Spacer(Modifier.weight(1f))
+            Glyph(Glyphs.minuteCol, null, Ink.mute, 14.dp)
+            Spacer(Modifier.width(4.dp))
+            BasicText(stringResource(R.string.col_min), style = Ink.meta)
+            Spacer(Modifier.width(4.dp))
+            HelpMark { onHelp(Help.Minutes) }
+        }
+        routes.forEach { route ->
+            RouteLine(route, onHelp)
+            Hair()
+        }
+        if (!more && stop.routes.size > 6) {
+            InkButton(Glyphs.more, stringResource(R.string.cd_more)) { more = true }
+        }
+        val failed = stop.routes.isNotEmpty() && stop.routes.all { it.state == com.wusper.eta.data.EtaState.Failed }
+        if (failed) BasicText(stringResource(R.string.fail), style = Ink.meta, modifier = Modifier.padding(vertical = 6.dp))
+    }
+}
+
+@Composable
+private fun RouteLine(route: Route, onHelp: (Help) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(opIcon(route.co), null, Ink.black, 16.dp)
+            Spacer(Modifier.width(6.dp))
+            BasicText(route.route, style = Ink.route)
+            if (route.serviceType != "1") {
+                Spacer(Modifier.width(6.dp))
+                BasicText(stringResource(R.string.service_n, route.serviceType), style = Ink.meta)
+                Spacer(Modifier.width(2.dp))
+                HelpMark { onHelp(Help.Service) }
+            }
+            Spacer(Modifier.weight(1f))
+            MinutesRow(route.state, route.etas, onHelp)
+        }
+        if (route.dest.isNotBlank()) {
+            BasicText(route.dest, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun CompactStop(stop: Stop, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .background(if (selected) Ink.wash else Ink.paper)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick),
+    ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(if (selected) Ink.black else Ink.paper))
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BasicText(stop.name, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                if (stop.meters > 0) BasicText(formatMeters(stop.meters), style = Ink.meta)
+            }
+            val chips = stop.routes.map { it.route }.distinct().take(6).joinToString("  ")
+            if (chips.isNotBlank()) BasicText(chips, style = Ink.meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+    Hair()
+}
+
+@Composable
+private fun CompactMtr(station: MtrStop, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(Glyphs.mtr, null, Ink.black, 16.dp)
+        Spacer(Modifier.width(8.dp))
+        BasicText(station.name, style = Ink.body, modifier = Modifier.weight(1f))
+        BasicText(station.lines.joinToString(" ") { it.name }, style = Ink.meta, maxLines = 1)
+        if (station.meters > 0) {
+            Spacer(Modifier.width(8.dp))
+            BasicText(formatMeters(station.meters), style = Ink.meta)
+        }
+    }
+    Hair()
+}
+
+@Composable
+private fun MtrBoard(station: MtrStop, onHelp: (Help) -> Unit) {
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(Glyphs.mtr, null, Ink.black, 18.dp)
+            Spacer(Modifier.width(8.dp))
+            BasicText(station.name, style = Ink.title, modifier = Modifier.weight(1f))
+            if (station.meters > 0) BasicText(formatMeters(station.meters), style = Ink.meta)
+            Spacer(Modifier.width(4.dp))
+            HelpMark { onHelp(Help.MtrGeo) }
+        }
+        station.lines.forEach { line -> LineBoard(line, onHelp) }
+    }
+    Hair()
+}
+
+@Composable
+private fun LineBoard(line: MtrLine, onHelp: (Help) -> Unit) {
+    Column(Modifier.padding(top = 6.dp)) {
+        BasicText(line.name, style = Ink.small)
+        SideRow(stringResource(R.string.up), line.up, onHelp)
+        SideRow(stringResource(R.string.down), line.down, onHelp)
+    }
+}
+
+@Composable
+private fun SideRow(label: String, trains: List<com.wusper.eta.data.MtrTrain>, onHelp: (Help) -> Unit) {
+    if (trains.isEmpty()) return
+    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicText(label, style = Ink.meta)
+        Spacer(Modifier.width(4.dp))
+        HelpMark { onHelp(Help.MtrSide) }
+        Spacer(Modifier.width(8.dp))
+        BasicText(trains.first().dest, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        trains.take(3).forEach { train ->
+            Spacer(Modifier.width(8.dp))
+            BasicText(if (train.minutes == null) "–" else "${train.minutes}′", style = Ink.minute)
+        }
+    }
+}
+
+@Composable
+private fun SavedRow(saved: SavedStop, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        BasicText(saved.name, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (saved.label.isNotBlank()) BasicText(saved.label, style = Ink.meta)
+    }
+    Hair()
+}
+
+@Composable
+private fun RouteHit(route: Route, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(opIcon(route.co), null, Ink.black, 16.dp)
+        Spacer(Modifier.width(8.dp))
+        BasicText(route.route, style = Ink.route)
+        Spacer(Modifier.width(8.dp))
+        BasicText(route.dest, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+    }
+    Hair()
+}
+
+@Composable
+private fun FailRow(onRetry: () -> Unit) {
+    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicText(stringResource(R.string.fail), style = Ink.body)
+        Spacer(Modifier.width(8.dp))
+        InkButton(Glyphs.retry, stringResource(R.string.cd_retry), onClick = onRetry)
+    }
+}
+
+private fun visibleStops(model: AppModel): List<Stop> {
+    if (model.filter == Filter.Mtr) return emptyList()
+    return model.stops.mapNotNull { stop ->
+        val routes = stop.routes.filter { model.filter.accepts(it.co) }
+        if (routes.isEmpty()) null else stop.copy(routes = routes)
+    }
+}
+
+private fun opIcon(co: String): ImageVector = when (co) {
+    "KMB" -> Glyphs.kmb
+    "GMB" -> Glyphs.gmb
+    "MTR" -> Glyphs.mtr
+    else -> Glyphs.ctb
+}
+
+private fun SavedStop.asStop(): Stop = Stop(key, co, id, name, 0, lat, lng, emptyList())
+
+@Composable
+private fun Box(modifier: Modifier, content: @Composable () -> Unit = {}) {
+    androidx.compose.foundation.layout.Box(modifier, contentAlignment = Alignment.TopStart) { content() }
+}

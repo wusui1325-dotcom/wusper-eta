@@ -1,0 +1,5 @@
+SPLcom/wusper/eta/MainActivity;-><init>()V
+SPLcom/wusper/eta/MainActivity;->onCreate(Landroid/os/Bundle;)V
+SPLcom/wusper/eta/data/SnapshotStore;->read(Landroid/content/Context;)Lcom/wusper/eta/data/Snapshot;
+HSPLcom/wusper/eta/ui/ShellKt;->Root(Lcom/wusper/eta/data/AppModel;Landroidx/compose/runtime/Composer;I)V
+HSPLcom/wusper/eta/ui/NearbyKt;->NearbyPane(Lcom/wusper/eta/data/AppModel;ZLandroidx/compose/runtime/Composer;I)V
