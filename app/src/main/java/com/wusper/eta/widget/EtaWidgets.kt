@@ -24,6 +24,7 @@ import com.wusper.eta.data.UiPrefs
 import com.wusper.eta.data.WidgetChoice
 import com.wusper.eta.data.WidgetFace
 import com.wusper.eta.data.WidgetPrefs
+import com.wusper.eta.data.chooseSecondWidgetRoute
 import com.wusper.eta.data.chooseWidgetRoute
 import com.wusper.eta.data.nearestStop
 import kotlinx.coroutines.runBlocking
@@ -33,7 +34,7 @@ object EtaWidgets {
 
     private val sizes = listOf(
         Triple(EtaWidgetTiny::class.java, "1x1", R.layout.widget_1x1),
-        Triple(EtaWidgetTall::class.java, "1x2", R.layout.widget_1x2),
+        Triple(EtaWidgetWide::class.java, "2x1", R.layout.widget_2x1),
         Triple(EtaWidgetSquare::class.java, "2x2", R.layout.widget_2x2),
     )
 
@@ -71,7 +72,7 @@ object EtaWidgets {
     fun refreshOne(context: Context, id: Int, size: String, cls: Class<*>) {
         val previous = WidgetPrefs.face(context, id)
         val face = try {
-            runBlocking { resolve(context, id, previous) }
+            runBlocking { resolve(context, id, size, previous) }
         } catch (_: Exception) {
             previous.copy(settled = false, minutes = if (previous.settled) previous.minutes else "")
         }
@@ -80,55 +81,126 @@ object EtaWidgets {
         push(context, manager, id, size, cls, face)
     }
 
-    private suspend fun resolve(context: Context, id: Int, previous: WidgetFace): WidgetFace {
+    private suspend fun resolve(context: Context, id: Int, size: String, previous: WidgetFace): WidgetFace {
         val choice = WidgetPrefs.choice(context, id)
-        val route = if (choice.manual && choice.route != null) {
-            choice.route
-        } else {
+        val primary = fillSlot(
+            context,
+            choice.manual,
+            choice.route,
+            choice.stopId,
+            choice.stopName,
+            except = null,
+            previousRoute = previous.route,
+            previousStop = previous.stop,
+            previousMinutes = previous.minutes,
+            previousSettled = previous.settled,
+        )
+        if (size != "2x2") {
+            return WidgetFace(
+                route = primary.route,
+                bound = primary.bound,
+                stop = primary.stop,
+                minutes = primary.minutes,
+                settled = primary.settled,
+            )
+        }
+        val second = fillSlot(
+            context,
+            choice.manualB,
+            choice.routeB,
+            choice.stopIdB,
+            choice.stopNameB,
+            except = primary.id,
+            previousRoute = previous.routeB,
+            previousStop = previous.stopB,
+            previousMinutes = previous.minutesB,
+            previousSettled = previous.settledB,
+        )
+        return WidgetFace(
+            route = primary.route,
+            bound = primary.bound,
+            stop = primary.stop,
+            minutes = primary.minutes,
+            settled = primary.settled,
+            routeB = second.route,
+            boundB = second.bound,
+            stopB = second.stop,
+            minutesB = second.minutes,
+            settledB = second.settled,
+        )
+    }
+
+    private data class SlotFace(
+        val id: String,
+        val route: String,
+        val bound: String,
+        val stop: String,
+        val minutes: String,
+        val settled: Boolean,
+    )
+
+    private suspend fun fillSlot(
+        context: Context,
+        manual: Boolean,
+        chosen: FavRoute?,
+        stopId: String,
+        stopName: String,
+        except: String?,
+        previousRoute: String,
+        previousStop: String,
+        previousMinutes: String,
+        previousSettled: Boolean,
+    ): SlotFace {
+        val route = if (manual && chosen != null) {
+            chosen
+        } else if (except == null) {
             chooseWidgetRoute(
                 UiPrefs.savedRoutes(context),
                 RouteUsage.read(context),
                 RouteUsage.last(context),
-                nearbyRoute(context),
+                fallbackRoutes(context).firstOrNull(),
             )
-        } ?: return WidgetFace()
+        } else {
+            chooseSecondWidgetRoute(
+                UiPrefs.savedRoutes(context),
+                RouteUsage.read(context),
+                RouteUsage.last(context),
+                fallbackRoutes(context).firstOrNull { it.id != except },
+                except,
+            )
+        } ?: return SlotFace("", previousRoute, "", previousStop, if (previousSettled) previousMinutes else "", false)
         val here = lastFix(context)
         val lat = here?.first ?: 0.0
         val lng = here?.second ?: 0.0
         val api = TransitApi()
-        val localized = UiPrefs.wrap(context)
-        val none = localized.getString(R.string.none)
+        val none = UiPrefs.wrap(context).getString(R.string.none)
+        val title = route.title.ifBlank { route.route.ifBlank { route.line } }
+        val kept = if (previousSettled) previousMinutes else ""
         return if (route.line.isNotBlank()) {
             val index = MtrIndex.load(context)
             val stations = index.onLine(route.line).mapIndexed { i, station ->
                 DetailStop(station.sta, station.name, station.lat, station.lng, i + 1)
             }
-            val stop = if (choice.stopId.isNotBlank()) {
-                stations.firstOrNull { it.id == choice.stopId }
-            } else {
-                nearestStop(stations, lat, lng)
-            }
-            if (stop == null) {
-                return face(route, choice.stopName, previous, settled = false, minutes = "")
-            }
+            val stop = if (stopId.isNotBlank()) stations.firstOrNull { it.id == stopId } else nearestStop(stations, lat, lng)
+            if (stop == null) return SlotFace(route.id, title, route.dest, stopName.ifBlank { previousStop }, "", false)
             val board = api.mtrReady(route.line, stop.id, index::name)
-                ?: return face(route, stop.name, previous, settled = false, minutes = if (previous.settled) previous.minutes else "")
+                ?: return SlotFace(route.id, title, route.dest, stop.name, kept, false)
             val trains = if (route.side == "down") board.second else board.first
             val minute = trains.firstOrNull { it.minutes != null }?.minutes
-            face(route, stop.name, previous, settled = true, minutes = if (minute == null) none else "$minute′")
+            SlotFace(route.id, title, route.dest, stop.name, if (minute == null) none else "$minute′", true)
         } else {
             val stops = try {
                 api.routeStops(route.asRoute()).map { DetailStop(it.id, it.name, it.lat, it.lng, it.seq) }
             } catch (_: Exception) {
                 emptyList()
             }
-            val stop = if (choice.stopId.isNotBlank()) {
-                stops.firstOrNull { it.id == choice.stopId } ?: DetailStop(choice.stopId, choice.stopName, 0.0, 0.0, 0)
+            val stop = if (stopId.isNotBlank()) {
+                stops.firstOrNull { it.id == stopId } ?: DetailStop(stopId, stopName, 0.0, 0.0, 0)
             } else {
                 nearestStop(stops, lat, lng)
             }
             if (stop == null || stop.id.isBlank()) {
-                return face(route, choice.stopName, previous, settled = false, minutes = "")
+                return SlotFace(route.id, title, route.dest, stopName.ifBlank { previousStop }, "", false)
             }
             val slots = try {
                 api.live(route.asRoute().copy(stopId = stop.id))
@@ -136,55 +208,51 @@ object EtaWidgets {
                 null
             }
             if (slots == null) {
-                face(route, stop.name, previous, settled = false, minutes = if (previous.settled) previous.minutes else "")
+                SlotFace(route.id, title, route.dest, stop.name, kept, false)
             } else {
                 val minute = slots.firstOrNull { it.minutes != null }?.minutes
-                face(route, stop.name, previous, settled = true, minutes = if (minute == null) none else "$minute′")
+                SlotFace(route.id, title, route.dest, stop.name, if (minute == null) none else "$minute′", true)
             }
         }
     }
 
-    private fun face(route: FavRoute, stop: String, previous: WidgetFace, settled: Boolean, minutes: String): WidgetFace {
-        val bound = route.dest
-        return WidgetFace(
-            route = route.title.ifBlank { route.route.ifBlank { route.line } },
-            bound = bound,
-            stop = stop.ifBlank { previous.stop },
-            minutes = minutes,
-            settled = settled,
-        )
-    }
-
-    private fun nearbyRoute(context: Context): FavRoute? {
+    private fun fallbackRoutes(context: Context): List<FavRoute> {
         val snap = SnapshotStore.read(context)
-        val stop = snap.stops.firstOrNull { it.routes.isNotEmpty() }
-        if (stop != null) {
-            val route = stop.routes.first()
-            return FavRoute(
-                id = "bus|${route.co}|${route.route}|${route.dir}|${route.serviceType}|${route.routeId}",
-                title = route.route,
-                dest = route.dest,
-                stopName = stop.name,
-                co = route.co,
-                route = route.route,
-                dir = route.dir,
-                serviceType = route.serviceType,
-                routeId = route.routeId,
-                region = route.region,
-                stopId = route.stopId.ifBlank { stop.id },
+        val out = ArrayList<FavRoute>()
+        snap.stops.forEach { stop ->
+            stop.routes.take(2).forEach { route ->
+                out.add(
+                    FavRoute(
+                        id = "bus|${route.co}|${route.route}|${route.dir}|${route.serviceType}|${route.routeId}",
+                        title = route.route,
+                        dest = route.dest,
+                        stopName = stop.name,
+                        co = route.co,
+                        route = route.route,
+                        dir = route.dir,
+                        serviceType = route.serviceType,
+                        routeId = route.routeId,
+                        region = route.region,
+                        stopId = route.stopId.ifBlank { stop.id },
+                    ),
+                )
+            }
+        }
+        snap.mtr.take(2).forEach { station ->
+            val line = station.lines.firstOrNull() ?: return@forEach
+            out.add(
+                FavRoute(
+                    id = "mtr|${line.code}|up",
+                    title = line.name.ifBlank { line.code },
+                    dest = "",
+                    stopName = station.name,
+                    stopId = station.sta,
+                    line = line.code,
+                    side = "up",
+                ),
             )
         }
-        val station = snap.mtr.firstOrNull { it.lines.isNotEmpty() } ?: return null
-        val line = station.lines.first()
-        return FavRoute(
-            id = "mtr|${line.code}|up",
-            title = line.name.ifBlank { line.code },
-            dest = "",
-            stopName = station.name,
-            stopId = station.sta,
-            line = line.code,
-            side = "up",
-        )
+        return out.distinctBy { it.id }
     }
 
     @SuppressLint("MissingPermission")
@@ -219,21 +287,59 @@ object EtaWidgets {
         val paper = if (night) 0xFF111111.toInt() else 0xFFFFFFFF.toInt()
         val ink = if (night) 0xFFFFFFFF.toInt() else 0xFF111111.toInt()
         val mute = if (night) 0xFF9A9A9A.toInt() else 0xFF6A6A6A.toInt()
+        val localized = UiPrefs.wrap(context)
+        val bound = boundText(localized, face.bound)
         views.setInt(R.id.widget_root, "setBackgroundColor", paper)
-        views.setTextColor(R.id.widget_route, ink)
-        views.setTextColor(R.id.widget_minutes, ink)
-        views.setTextViewText(R.id.widget_route, face.route)
-        views.setTextViewText(R.id.widget_minutes, face.minutes)
-        if (size != "1x1") {
-            val bound = if (face.bound.isBlank()) "" else UiPrefs.wrap(context).getString(R.string.bound_to, face.bound)
-            views.setTextColor(R.id.widget_bound, mute)
+        paintBlock(views, R.id.widget_route, R.id.widget_minutes, R.id.widget_bound, ink, mute, face.route, face.minutes, bound)
+        if (size == "1x1") {
+            views.setTextColor(R.id.widget_nearest, mute)
+            views.setTextViewText(R.id.widget_nearest, localized.getString(R.string.widget_nearest))
+        } else {
             views.setTextColor(R.id.widget_stop, mute)
-            views.setTextViewText(R.id.widget_bound, bound)
             views.setTextViewText(R.id.widget_stop, face.stop)
-            views.setViewVisibility(R.id.widget_bound, if (bound.isBlank()) View.GONE else View.VISIBLE)
             views.setViewVisibility(R.id.widget_stop, if (face.stop.isBlank()) View.GONE else View.VISIBLE)
         }
-        val route = activeRoute(context, id)
+        if (size == "2x2") {
+            val boundB = boundText(localized, face.boundB)
+            paintBlock(views, R.id.widget_route_b, R.id.widget_minutes_b, R.id.widget_bound_b, ink, mute, face.routeB, face.minutesB, boundB)
+            views.setTextColor(R.id.widget_stop_b, mute)
+            views.setTextViewText(R.id.widget_stop_b, face.stopB)
+            views.setViewVisibility(R.id.widget_stop_b, if (face.stopB.isBlank()) View.GONE else View.VISIBLE)
+            views.setInt(R.id.widget_rule, "setBackgroundColor", mute)
+            views.setOnClickPendingIntent(R.id.widget_top, openIntent(context, id * 2, activeRoute(context, id, 0)))
+            views.setOnClickPendingIntent(R.id.widget_bottom, openIntent(context, id * 2 + 1, activeRoute(context, id, 1)))
+        } else {
+            views.setOnClickPendingIntent(R.id.widget_root, openIntent(context, id, activeRoute(context, id, 0)))
+        }
+        manager.updateAppWidget(id, views)
+    }
+
+    private fun paintBlock(
+        views: RemoteViews,
+        routeId: Int,
+        minutesId: Int,
+        boundId: Int,
+        ink: Int,
+        mute: Int,
+        route: String,
+        minutes: String,
+        bound: String,
+    ) {
+        views.setTextColor(routeId, ink)
+        views.setTextColor(minutesId, ink)
+        views.setTextColor(boundId, mute)
+        views.setTextViewText(routeId, route)
+        views.setTextViewText(minutesId, minutes)
+        views.setTextViewText(boundId, bound)
+        views.setViewVisibility(boundId, if (bound.isBlank()) View.GONE else View.VISIBLE)
+    }
+
+    private fun boundText(context: Context, dest: String): String {
+        if (dest.isBlank()) return ""
+        return context.getString(R.string.bound_to, dest)
+    }
+
+    private fun openIntent(context: Context, request: Int, route: FavRoute?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             if (route != null) {
@@ -253,20 +359,24 @@ object EtaWidgets {
             }
         }
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val pending = PendingIntent.getActivity(context, id, intent, flags)
-        views.setOnClickPendingIntent(R.id.widget_root, pending)
-        manager.updateAppWidget(id, views)
+        return PendingIntent.getActivity(context, request, intent, flags)
     }
 
-    fun activeRoute(context: Context, id: Int): FavRoute? {
+    fun activeRoute(context: Context, id: Int, slot: Int = 0): FavRoute? {
         val choice = WidgetPrefs.choice(context, id)
-        if (choice.manual && choice.route != null) return choice.route
-        return chooseWidgetRoute(
-            UiPrefs.savedRoutes(context),
-            RouteUsage.read(context),
-            RouteUsage.last(context),
-            nearbyRoute(context),
-        )
+        val manual = if (slot == 0) choice.manual else choice.manualB
+        val chosen = if (slot == 0) choice.route else choice.routeB
+        if (manual && chosen != null) return chosen
+        val favorites = UiPrefs.savedRoutes(context)
+        val usage = RouteUsage.read(context)
+        val last = RouteUsage.last(context)
+        val fallback = fallbackRoutes(context)
+        return if (slot == 0) {
+            chooseWidgetRoute(favorites, usage, last, fallback.firstOrNull())
+        } else {
+            val first = activeRoute(context, id, 0)?.id.orEmpty()
+            chooseSecondWidgetRoute(favorites, usage, last, fallback.firstOrNull { it.id != first }, first)
+        }
     }
 
     fun provider(size: String): Class<*> = sizes.first { it.second == size }.first
@@ -284,9 +394,9 @@ class EtaWidgetTiny : AppWidgetProvider() {
     }
 }
 
-class EtaWidgetTall : AppWidgetProvider() {
+class EtaWidgetWide : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        deliver(context, appWidgetManager, appWidgetIds, "1x2")
+        deliver(context, appWidgetManager, appWidgetIds, "2x1")
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {

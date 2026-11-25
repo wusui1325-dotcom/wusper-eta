@@ -84,6 +84,19 @@ fun chooseWidgetRoute(
     return last ?: nearby
 }
 
+fun chooseSecondWidgetRoute(
+    favorites: List<FavRoute>,
+    usage: List<Pair<FavRoute, Int>>,
+    last: FavRoute?,
+    nearby: FavRoute?,
+    exceptId: String,
+): FavRoute? = chooseWidgetRoute(
+    favorites.filter { it.id != exceptId },
+    usage.filter { it.first.id != exceptId },
+    last?.takeIf { it.id != exceptId },
+    nearby?.takeIf { it.id != exceptId },
+)
+
 fun matchesStopName(query: String, nameZh: String, nameEn: String): Boolean {
     val q = query.trim()
     if (q.isEmpty()) return false

@@ -4,52 +4,123 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/paper"
-    android:gravity="center_vertical"
     android:orientation="vertical"
-    android:padding="14dp">
+    android:paddingLeft="12dp"
+    android:paddingRight="12dp"
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
 
     <LinearLayout
+        android:id="@+id/widget_top"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_route"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_bound"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/widget_minutes"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textSize="18sp" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/widget_route"
-            android:layout_width="0dp"
+            android:id="@+id/widget_stop"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/ink"
-            android:textSize="32sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/widget_minutes"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:textColor="@color/ink"
-            android:textSize="26sp" />
+            android:textSize="13sp" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/widget_bound"
+    <View
+        android:id="@+id/widget_rule"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/ink"
-        android:textSize="16sp" />
+        android:layout_height="1dp"
+        android:background="@color/ink" />
 
-    <TextView
-        android:id="@+id/widget_stop"
+    <LinearLayout
+        android:id="@+id/widget_bottom"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textColor="@color/ink"
-        android:textSize="16sp" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_route_b"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_bound_b"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/widget_minutes_b"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:maxLines="1"
+                android:textColor="@color/ink"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_stop_b"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/ink"
+            android:textSize="13sp" />
+    </LinearLayout>
 </LinearLayout>

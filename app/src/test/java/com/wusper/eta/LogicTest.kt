@@ -18,6 +18,7 @@ import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.mtrLineOrder
 import com.wusper.eta.data.Stop
 import com.wusper.eta.data.FavRoute
+import com.wusper.eta.data.chooseSecondWidgetRoute
 import com.wusper.eta.data.chooseWidgetRoute
 import com.wusper.eta.data.exitLabel
 import com.wusper.eta.data.minuteSpan
@@ -179,6 +180,8 @@ class LogicTest {
         assertEquals("72", overall?.title)
         val fallback = chooseWidgetRoute(emptyList(), emptyList(), null, fav)
         assertEquals("71K", fallback?.title)
+        val second = chooseSecondWidgetRoute(listOf(fav, other), listOf(other to 9), null, null, fav.id)
+        assertEquals("72", second?.title)
     }
 
     @Test

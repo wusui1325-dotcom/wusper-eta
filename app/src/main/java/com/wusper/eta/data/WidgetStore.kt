@@ -9,6 +9,10 @@ data class WidgetChoice(
     val route: FavRoute? = null,
     val stopId: String = "",
     val stopName: String = "",
+    val manualB: Boolean = false,
+    val routeB: FavRoute? = null,
+    val stopIdB: String = "",
+    val stopNameB: String = "",
 )
 
 data class WidgetFace(
@@ -17,6 +21,11 @@ data class WidgetFace(
     val stop: String = "",
     val minutes: String = "",
     val settled: Boolean = false,
+    val routeB: String = "",
+    val boundB: String = "",
+    val stopB: String = "",
+    val minutesB: String = "",
+    val settledB: Boolean = false,
 )
 
 object RouteUsage {
@@ -92,6 +101,10 @@ object WidgetPrefs {
             route = o.optJSONObject("route")?.route(),
             stopId = o.optString("stopId"),
             stopName = o.optString("stopName"),
+            manualB = o.optBoolean("manualB", false),
+            routeB = o.optJSONObject("routeB")?.route(),
+            stopIdB = o.optString("stopIdB"),
+            stopNameB = o.optString("stopNameB"),
         )
     }
 
@@ -100,7 +113,11 @@ object WidgetPrefs {
             .put("manual", choice.manual)
             .put("stopId", choice.stopId)
             .put("stopName", choice.stopName)
+            .put("manualB", choice.manualB)
+            .put("stopIdB", choice.stopIdB)
+            .put("stopNameB", choice.stopNameB)
         if (choice.route != null) o.put("route", choice.route.json())
+        if (choice.routeB != null) o.put("routeB", choice.routeB.json())
         context.prefs().edit().putString(key(id), o.toString()).apply()
     }
 
@@ -118,6 +135,11 @@ object WidgetPrefs {
             stop = o.optString("stop"),
             minutes = o.optString("minutes"),
             settled = o.optBoolean("settled", false),
+            routeB = o.optString("routeB"),
+            boundB = o.optString("boundB"),
+            stopB = o.optString("stopB"),
+            minutesB = o.optString("minutesB"),
+            settledB = o.optBoolean("settledB", false),
         )
     }
 
@@ -130,6 +152,11 @@ object WidgetPrefs {
                 .put("stop", face.stop)
                 .put("minutes", face.minutes)
                 .put("settled", face.settled)
+                .put("routeB", face.routeB)
+                .put("boundB", face.boundB)
+                .put("stopB", face.stopB)
+                .put("minutesB", face.minutesB)
+                .put("settledB", face.settledB)
                 .toString(),
         ).apply()
     }

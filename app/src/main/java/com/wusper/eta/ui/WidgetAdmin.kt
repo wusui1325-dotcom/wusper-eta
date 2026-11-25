@@ -37,9 +37,7 @@ import com.wusper.eta.data.MtrIndex
 import com.wusper.eta.data.RouteUsage
 import com.wusper.eta.data.TransitApi
 import com.wusper.eta.data.UiPrefs
-import com.wusper.eta.data.WidgetChoice
 import com.wusper.eta.data.WidgetPrefs
-import com.wusper.eta.data.chooseWidgetRoute
 import com.wusper.eta.widget.EtaWidgets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,7 +48,7 @@ fun WidgetSizeRow(onDone: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
     Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        listOf("1x1" to R.string.widget_1x1, "1x2" to R.string.widget_1x2, "2x2" to R.string.widget_2x2).forEach { (size, label) ->
+        listOf("1x1" to R.string.widget_1x1, "2x1" to R.string.widget_2x1, "2x2" to R.string.widget_2x2).forEach { (size, label) ->
             InkButton(Glyphs.all, stringResource(label), label = stringResource(label)) {
                 if (activity != null) EtaWidgets.pin(activity, size)
                 onDone()
@@ -63,7 +61,7 @@ fun WidgetSizeRow(onDone: () -> Unit) {
 fun WidgetAdminPane(model: AppModel) {
     val context = LocalContext.current
     var revision by remember { mutableIntStateOf(0) }
-    var openId by remember { mutableIntStateOf(0) }
+    var openKey by remember { mutableStateOf("") }
     var stops by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val placed = remember(revision) { EtaWidgets.placed(context) }
@@ -86,79 +84,108 @@ fun WidgetAdminPane(model: AppModel) {
             Spacer(Modifier.height(12.dp))
             placed.forEach { item ->
                 val choice = WidgetPrefs.choice(context, item.id)
-                val route = if (choice.manual && choice.route != null) {
-                    choice.route
-                } else {
-                    chooseWidgetRoute(favorites, usage, RouteUsage.last(context), null)
-                }
                 val sizeLabel = when (item.size) {
-                    "1x2" -> stringResource(R.string.widget_1x2)
+                    "2x1" -> stringResource(R.string.widget_2x1)
                     "2x2" -> stringResource(R.string.widget_2x2)
                     else -> stringResource(R.string.widget_1x1)
                 }
+                val slots = if (item.size == "2x2") listOf(0, 1) else listOf(0)
                 Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     BasicText(sizeLabel, style = Ink.meta)
-                    BasicText(
-                        route?.let { it.title.ifBlank { it.route.ifBlank { it.line } } }
-                            ?: stringResource(R.string.widget_auto),
-                        style = Ink.route,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (!choice.manual) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            BasicText(stringResource(R.string.widget_auto), style = Ink.meta)
-                            Spacer(Modifier.width(6.dp))
-                            HelpMark { model.help = Help.WidgetAuto }
+                    slots.forEach { slot ->
+                        val manual = if (slot == 0) choice.manual else choice.manualB
+                        val picked = if (slot == 0) choice.route else choice.routeB
+                        val stopName = if (slot == 0) choice.stopName else choice.stopNameB
+                        val route = if (manual && picked != null) {
+                            picked
+                        } else {
+                            EtaWidgets.activeRoute(context, item.id, slot)
                         }
-                    }
-                    val stopLabel = choice.stopName.ifBlank { stringResource(R.string.widget_nearest) }
-                    BasicText(stopLabel, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(4.dp))
-                    InkButton(Glyphs.routeCol, stringResource(R.string.col_route), label = stringResource(R.string.col_route)) {
-                        openId = if (openId == item.id) 0 else item.id
-                        stops = emptyList()
-                    }
-                    if (openId == item.id) {
-                        InkButton(Glyphs.all, stringResource(R.string.widget_auto), label = stringResource(R.string.widget_auto)) {
-                            WidgetPrefs.saveChoice(context, item.id, WidgetChoice())
-                            refresh(context, item.id, item.size, item.cls)
-                            revision += 1
+                        val key = "${item.id}:$slot"
+                        if (item.size == "2x2") {
+                            Spacer(Modifier.height(8.dp))
+                            BasicText(
+                                stringResource(if (slot == 0) R.string.widget_upper else R.string.widget_lower),
+                                style = Ink.meta,
+                            )
                         }
-                        options(favorites, usage).forEach { candidate ->
-                            InkButton(
-                                Glyphs.routeCol,
-                                candidate.title.ifBlank { candidate.route },
-                                label = candidate.title.ifBlank { candidate.route },
-                            ) {
-                                WidgetPrefs.saveChoice(
+                        BasicText(
+                            route?.let { it.title.ifBlank { it.route.ifBlank { it.line } } }
+                                ?: stringResource(R.string.widget_auto),
+                            style = Ink.route,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (!manual) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                BasicText(stringResource(R.string.widget_auto), style = Ink.meta)
+                                Spacer(Modifier.width(6.dp))
+                                HelpMark { model.help = Help.WidgetAuto }
+                            }
+                        }
+                        BasicText(
+                            stopName.ifBlank { stringResource(R.string.widget_nearest) },
+                            style = Ink.body,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        InkButton(Glyphs.routeCol, stringResource(R.string.col_route), label = stringResource(R.string.col_route)) {
+                            openKey = if (openKey == key) "" else key
+                            stops = emptyList()
+                        }
+                        if (openKey == key) {
+                            InkButton(Glyphs.all, stringResource(R.string.widget_auto), label = stringResource(R.string.widget_auto)) {
+                                writeSlot(context, item.id, slot, manual = false, route = null, stopId = "", stopName = "")
+                                refresh(context, item.id, item.size, item.cls)
+                                revision += 1
+                            }
+                            options(favorites, usage).forEach { candidate ->
+                                InkButton(
+                                    Glyphs.routeCol,
+                                    candidate.title.ifBlank { candidate.route.ifBlank { candidate.line } },
+                                    label = candidate.title.ifBlank { candidate.route.ifBlank { candidate.line } },
+                                ) {
+                                    writeSlot(context, item.id, slot, manual = true, route = candidate, stopId = "", stopName = "")
+                                    refresh(context, item.id, item.size, item.cls)
+                                    revision += 1
+                                }
+                            }
+                            InkButton(Glyphs.stopPole, stringResource(R.string.widget_nearest), label = stringResource(R.string.widget_nearest)) {
+                                val current = WidgetPrefs.choice(context, item.id)
+                                writeSlot(
                                     context,
                                     item.id,
-                                    WidgetChoice(manual = true, route = candidate),
+                                    slot,
+                                    manual = if (slot == 0) current.manual else current.manualB,
+                                    route = if (slot == 0) current.route else current.routeB,
+                                    stopId = "",
+                                    stopName = "",
                                 )
                                 refresh(context, item.id, item.size, item.cls)
                                 revision += 1
                             }
-                        }
-                        InkButton(Glyphs.stopPole, stringResource(R.string.widget_nearest), label = stringResource(R.string.widget_nearest)) {
-                            val current = WidgetPrefs.choice(context, item.id)
-                            WidgetPrefs.saveChoice(context, item.id, current.copy(stopId = "", stopName = ""))
-                            refresh(context, item.id, item.size, item.cls)
-                            revision += 1
-                        }
-                        if (route != null) {
-                            InkButton(Glyphs.stopPole, stringResource(R.string.sec_stops), label = stringResource(R.string.sec_stops)) {
-                                scope.launch {
-                                    val loaded = withContext(Dispatchers.IO) { loadStops(context, route) }
-                                    stops = loaded
+                            if (route != null) {
+                                InkButton(Glyphs.stopPole, stringResource(R.string.sec_stops), label = stringResource(R.string.sec_stops)) {
+                                    scope.launch {
+                                        val loaded = withContext(Dispatchers.IO) { loadStops(context, route) }
+                                        if (openKey == key) stops = loaded
+                                    }
                                 }
-                            }
-                            stops.forEach { (id, name) ->
-                                InkButton(Glyphs.stopPole, name, label = name) {
-                                    val current = WidgetPrefs.choice(context, item.id)
-                                    WidgetPrefs.saveChoice(context, item.id, current.copy(stopId = id, stopName = name))
-                                    refresh(context, item.id, item.size, item.cls)
-                                    revision += 1
+                                stops.forEach { (stopId, name) ->
+                                    InkButton(Glyphs.stopPole, name, label = name) {
+                                        val current = WidgetPrefs.choice(context, item.id)
+                                        writeSlot(
+                                            context,
+                                            item.id,
+                                            slot,
+                                            manual = if (slot == 0) current.manual else current.manualB,
+                                            route = if (slot == 0) current.route else current.routeB,
+                                            stopId = stopId,
+                                            stopName = name,
+                                        )
+                                        refresh(context, item.id, item.size, item.cls)
+                                        revision += 1
+                                    }
                                 }
                             }
                         }
@@ -169,6 +196,24 @@ fun WidgetAdminPane(model: AppModel) {
             }
         }
     }
+}
+
+private fun writeSlot(
+    context: android.content.Context,
+    id: Int,
+    slot: Int,
+    manual: Boolean,
+    route: FavRoute?,
+    stopId: String,
+    stopName: String,
+) {
+    val current = WidgetPrefs.choice(context, id)
+    val next = if (slot == 0) {
+        current.copy(manual = manual, route = route, stopId = stopId, stopName = stopName)
+    } else {
+        current.copy(manualB = manual, routeB = route, stopIdB = stopId, stopNameB = stopName)
+    }
+    WidgetPrefs.saveChoice(context, id, next)
 }
 
 private fun options(favorites: List<FavRoute>, usage: List<Pair<FavRoute, Int>>): List<FavRoute> {

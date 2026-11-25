@@ -4,26 +4,60 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/paper"
-    android:gravity="center"
+    android:gravity="center_vertical"
     android:orientation="vertical"
-    android:padding="6dp">
+    android:paddingLeft="6dp"
+    android:paddingRight="6dp"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
 
-    <TextView
-        android:id="@+id/widget_route"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/ink"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:orientation="horizontal">
 
-    <TextView
-        android:id="@+id/widget_minutes"
-        android:layout_width="wrap_content"
+        <TextView
+            android:id="@+id/widget_route"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/ink"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_nearest"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textColor="@color/ink"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:maxLines="1"
-        android:textColor="@color/ink"
-        android:textSize="16sp" />
+        android:layout_marginTop="1dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_bound"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/ink"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/widget_minutes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textColor="@color/ink"
+            android:textSize="13sp" />
+    </LinearLayout>
 </LinearLayout>

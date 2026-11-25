@@ -6,7 +6,8 @@
     android:background="@color/paper"
     android:gravity="center_vertical"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:paddingLeft="10dp"
+    android:paddingRight="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -15,41 +16,41 @@
 
         <TextView
             android:id="@+id/widget_route"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/ink"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_bound"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/ink"
-            android:textSize="22sp"
-            android:textStyle="bold" />
+            android:textSize="13sp" />
 
         <TextView
             android:id="@+id/widget_minutes"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginLeft="8dp"
             android:maxLines="1"
             android:textColor="@color/ink"
-            android:textSize="18sp" />
+            android:textSize="16sp" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/widget_bound"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textColor="@color/ink"
-        android:textSize="14sp" />
 
     <TextView
         android:id="@+id/widget_stop"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
         android:ellipsize="end"
-        android:maxLines="2"
+        android:maxLines="1"
         android:textColor="@color/ink"
-        android:textSize="14sp" />
+        android:textSize="12sp" />
 </LinearLayout>
