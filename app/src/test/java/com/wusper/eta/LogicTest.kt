@@ -8,7 +8,9 @@ import com.wusper.eta.data.citybusOppositeDest
 import com.wusper.eta.data.decodePolyline
 import com.wusper.eta.data.haversineMeters
 import com.wusper.eta.data.isScheduledRemark
+import com.wusper.eta.data.dedupeRouteHits
 import com.wusper.eta.data.matchesRouteQuery
+import com.wusper.eta.data.routeSearchRank
 import com.wusper.eta.data.matchesStopName
 import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
@@ -78,6 +80,17 @@ class LogicTest {
         assertTrue(matchesRouteQuery("12A", "12A", "麥當勞道"))
         assertTrue(matchesRouteQuery("北角", "10", "北角碼頭"))
         assertFalse(matchesRouteQuery("001024", "12A", "麥當勞道"))
+        assertEquals(0, routeSearchRank("24", "24", "旺角(循環線)"))
+        assertEquals(1, routeSearchRank("24", "24X", "大埔"))
+        assertTrue(routeSearchRank("24", "24", "旺角")!! < routeSearchRank("24", "240X", "葵興")!!)
+        val routes = listOf(
+            Route("KMB", "24", "O", "1", "旺角(循環線)", "", "", "", EtaState.Loading, emptyList()),
+            Route("KMB", "24", "O", "2", "旺角(循環線)", "", "", "", EtaState.Loading, emptyList()),
+            Route("KMB", "24", "I", "1", "啟業", "", "", "", EtaState.Loading, emptyList()),
+        )
+        val unique = dedupeRouteHits(routes)
+        assertEquals(2, unique.size)
+        assertEquals("啟業", unique[1].dest)
     }
 
     @Test

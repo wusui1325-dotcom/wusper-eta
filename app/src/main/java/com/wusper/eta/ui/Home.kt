@@ -185,8 +185,18 @@ private fun mtrArrivals(
 
 private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String, String>): Arrival {
     val preferred = com.wusper.eta.data.preferredMtrSide(line.up, line.down)
-    val side = sides["$sta|${line.code}"] ?: com.wusper.eta.data.usefulMtrSide(line.code, sta, preferred)
-    val trains = if (side == "down") line.down else line.up
+    var side = sides["$sta|${line.code}"] ?: com.wusper.eta.data.usefulMtrSide(line.code, sta, preferred)
+    var trains = if (side == "down") line.down else line.up
+    val heading = trains.firstOrNull()?.dest.orEmpty()
+    if (heading.isNotBlank() && com.wusper.eta.data.atDestinationTerminus(stop, heading)) {
+        val flipped = if (side == "down") "up" else "down"
+        val other = if (flipped == "down") line.down else line.up
+        val otherDest = other.firstOrNull()?.dest.orEmpty()
+        if (otherDest.isBlank() || !com.wusper.eta.data.atDestinationTerminus(stop, otherDest)) {
+            side = flipped
+            trains = other
+        }
+    }
     val waiting = line.up.isEmpty() && line.down.isEmpty()
     return Arrival(
         key = "$sta-${line.code}",
@@ -242,19 +252,22 @@ private fun ArrivalLine(row: Arrival, onHelp: (Help) -> Unit, onFlip: (Flip) -> 
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     BasicText(row.route, style = Ink.arrivalRoute, maxLines = 1, softWrap = false)
                     if (bound.isNotEmpty()) {
+                        Spacer(Modifier.width(4.dp))
                         BasicText(
                             bound,
                             style = Ink.arrivalBound,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
+                            modifier = Modifier.weight(1f),
                         )
+                    } else {
+                        Spacer(Modifier.weight(1f))
                     }
                     if (row.flip != null) {
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(6.dp))
                         BoundButton { onFlip(row.flip) }
                     }
                 }
@@ -309,7 +322,7 @@ private fun BoundButton(onClick: () -> Unit) {
 private fun MinuteCluster(state: EtaState, etas: List<EtaSlot>, onHelp: (Help) -> Unit) {
     val noneLabel = stringResource(R.string.none)
     val label = when (state) {
-        EtaState.Loading, EtaState.Failed -> "–"
+        EtaState.Loading, EtaState.Failed -> ""
         EtaState.Ready -> {
             val mins = etas.mapNotNull { it.minutes }
             if (mins.isEmpty()) noneLabel else mins.take(2).joinToString("  ") { "$it′" }

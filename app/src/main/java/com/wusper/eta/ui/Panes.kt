@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -129,51 +132,36 @@ fun BoardPane(model: AppModel) {
 fun SearchPane(model: AppModel) {
     val routeMode = model.searchMode == com.wusper.eta.data.SearchMode.Route
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(start = 20.dp, end = 12.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            InkButton(
-                Glyphs.routeCol,
-                stringResource(R.string.search_route),
-                selected = routeMode,
-                label = stringResource(R.string.search_route),
-            ) { model.chooseSearch(com.wusper.eta.data.SearchMode.Route) }
-            Spacer(Modifier.width(8.dp))
-            InkButton(
-                Glyphs.stopPole,
-                stringResource(R.string.search_stop),
-                selected = !routeMode,
-                label = stringResource(R.string.search_stop),
-            ) { model.chooseSearch(com.wusper.eta.data.SearchMode.StopName) }
-            Spacer(Modifier.weight(1f))
-            if (model.query.isNotEmpty()) {
-                InkButton(Glyphs.clear, stringResource(R.string.cd_clear), label = stringResource(R.string.cd_clear)) {
-                    model.onQuery("")
-                }
+        Row(Modifier.padding(start = 28.dp, end = 28.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            SearchModeText(stringResource(R.string.search_route), routeMode) {
+                model.chooseSearch(com.wusper.eta.data.SearchMode.Route)
+            }
+            Spacer(Modifier.width(18.dp))
+            SearchModeText(stringResource(R.string.search_stop), !routeMode) {
+                model.chooseSearch(com.wusper.eta.data.SearchMode.StopName)
             }
         }
-        Column(Modifier.padding(horizontal = 28.dp)) {
-            FieldLine(
-                model.query,
-                stringResource(if (routeMode) R.string.hint_route else R.string.hint_stop),
-            ) { model.onQuery(it) }
+        Box(Modifier.padding(horizontal = 28.dp, vertical = 14.dp).fillMaxWidth()) {
+            if (model.query.isEmpty()) {
+                BasicText(
+                    stringResource(if (routeMode) R.string.hint_route else R.string.hint_stop),
+                    style = Ink.meta,
+                )
+            }
+            BasicTextField(
+                value = model.query,
+                onValueChange = { model.onQuery(it) },
+                textStyle = Ink.body,
+                singleLine = true,
+                cursorBrush = SolidColor(Ink.black),
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
+        Box(Modifier.padding(horizontal = 28.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
         LazyColumn(Modifier.weight(1f).padding(horizontal = 28.dp)) {
             if (routeMode) {
-                itemsIndexed(model.foundRoutes, key = { i, route -> "fr-$i-${route.co}-${route.route}-${route.dir}-${route.serviceType}" }) { _, route ->
-                    RouteHit(route) { model.openRoute(route) }
-                }
-                if (model.along.isNotEmpty()) {
-                    item {
-                        Row(Modifier.padding(top = 18.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Glyph(Glyphs.along, null, Ink.black, 16.dp)
-                            Spacer(Modifier.width(8.dp))
-                            BasicText(model.alongTitle.ifBlank { stringResource(R.string.sec_along) }, style = Ink.meta)
-                        }
-                    }
-                    items(model.along, key = { "al-${it.co}-${it.id}-${it.seq}" }) { stop ->
-                        NameRow(stop.name, "") {
-                            model.openStop(Stop("${stop.co}|${stop.id}", stop.co, stop.id, stop.name, 0, stop.lat, stop.lng, emptyList()))
-                        }
-                    }
+                items(model.foundRoutes, key = { route -> "fr-${route.co}-${route.route}-${route.dir}-${route.dest}" }) { route ->
+                    SearchRouteRow(route) { model.openRoute(route) }
                 }
             } else {
                 items(model.foundStops, key = { "fs-${it.key}" }) { stop ->
@@ -184,6 +172,42 @@ fun SearchPane(model: AppModel) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchModeText(label: String, selected: Boolean, onClick: () -> Unit) {
+    BasicText(
+        label,
+        style = if (selected) Ink.title else Ink.meta,
+        modifier = Modifier.clickable(remember { MutableInteractionSource() }, null, onClick = onClick),
+    )
+}
+
+@Composable
+private fun SearchRouteRow(route: Route, onClick: () -> Unit) {
+    val bound = if (route.dest.isBlank()) "" else stringResource(R.string.bound_to, route.dest)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(top = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicText(route.route, style = Ink.route, maxLines = 1, softWrap = false)
+            if (bound.isNotEmpty()) {
+                Spacer(Modifier.width(4.dp))
+                BasicText(
+                    bound,
+                    style = Ink.body,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
     }
 }
 

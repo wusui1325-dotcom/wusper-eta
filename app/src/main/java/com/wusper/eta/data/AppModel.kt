@@ -103,7 +103,7 @@ class AppModel(initial: Snapshot) {
         scope.launch {
             val ctx = app ?: return@launch
             val indexJob = async(Dispatchers.IO) { MtrIndex.load(ctx) }
-            launch { refreshOpenEtas() }
+            launch { refreshVisibleEtas() }
             index = indexJob.await()
             launch { refreshMtr() }
             launch { enrichCoords() }
@@ -210,7 +210,7 @@ class AppModel(initial: Snapshot) {
     fun refresh() {
         failed = false
         refreshNearby()
-        scope.launch { refreshOpenEtas() }
+        scope.launch { refreshVisibleEtas() }
         scope.launch { refreshMtr() }
     }
 
@@ -381,7 +381,7 @@ class AppModel(initial: Snapshot) {
         openKey = key
         val stop = stops.firstOrNull { it.key == key } ?: return
         pushRecent(stop.toSaved())
-        scope.launch { refreshOpenEtas() }
+        scope.launch { refreshVisibleEtas() }
         persist()
     }
 
@@ -411,7 +411,7 @@ class AppModel(initial: Snapshot) {
                             routes = full.routes.ifEmpty { current.routes },
                         )
                     }
-                    refreshOpenEtas()
+                    refreshVisibleEtas()
                 }
             }
         }
@@ -484,7 +484,12 @@ class AppModel(initial: Snapshot) {
             SearchMode.Route -> {
                 foundStops = emptyList()
                 foundMtr = emptyList()
-                foundRoutes = bundle.routes.filter { matchesRouteQuery(raw, it.route, it.dest) }
+                foundRoutes = dedupeRouteHits(
+                    bundle.routes.mapNotNull { route ->
+                        routeSearchRank(raw, route.route, route.dest)?.let { rank -> rank to route }
+                    }.sortedWith(compareBy({ it.first }, { it.second.route.length }, { it.second.route }))
+                        .map { it.second },
+                )
             }
             SearchMode.StopName -> {
                 foundRoutes = emptyList()
@@ -503,10 +508,24 @@ class AppModel(initial: Snapshot) {
             stop.routes.forEach { route ->
                 if (shownBound.containsKey(route.key)) return@forEach
                 if (!atDestinationTerminus(stop.name, route.dest)) return@forEach
-                val other = otherBound(bounds, route) ?: return@forEach
-                if (atDestinationTerminus(other.stopName, other.dest)) return@forEach
+                val local = otherBound(bounds, route)
+                if (local != null) {
+                    if (!atDestinationTerminus(local.stopName, local.dest)) {
+                        adoptBound(route.key, local, flipGen[route.key] ?: 0)
+                    }
+                    return@forEach
+                }
                 val generation = flipGen[route.key] ?: 0
-                adoptBound(route.key, other, generation)
+                scope.launch {
+                    val remote = try {
+                        api.otherBound(route, lat, lng)
+                    } catch (_: Exception) {
+                        null
+                    } ?: return@launch
+                    if (shownBound.containsKey(route.key)) return@launch
+                    if (atDestinationTerminus(remote.stopName, remote.dest)) return@launch
+                    adoptBound(route.key, remote, generation)
+                }
             }
         }
     }
@@ -660,7 +679,7 @@ class AppModel(initial: Snapshot) {
             stops = merged
             if (stops.none { it.key == openKey }) openKey = stops.firstOrNull()?.key.orEmpty()
             enrichCoords()
-            refreshOpenEtas()
+            refreshVisibleEtas()
             reconcileTermini()
             index?.let { applyMtr(it) }
             refreshMtr()
@@ -668,21 +687,26 @@ class AppModel(initial: Snapshot) {
         }
     }
 
-    private suspend fun refreshOpenEtas() {
-        val stop = stops.firstOrNull { it.key == openKey } ?: return
+    private fun refreshVisibleEtas() {
+        val pairs = stops.flatMap { stop -> stop.routes.map { stop.key to it } }
         etaJob?.cancel()
         etaJob = scope.launch {
             val gate = Semaphore(6)
-            stop.routes.forEach { route ->
+            pairs.forEach { (stopKey, route) ->
                 launch(Dispatchers.IO) {
                     gate.withPermit {
-                        val slots = try {
-                            api.live(route)
-                        } catch (_: Exception) {
-                            null
+                        var slots: List<EtaSlot>? = null
+                        var attempt = 0
+                        while (attempt < 2 && slots == null) {
+                            attempt += 1
+                            slots = try {
+                                api.live(route)
+                            } catch (_: Exception) {
+                                null
+                            }
                         }
                         withContext(Dispatchers.Main) {
-                            applyEta(stop.key, route.key, slots)
+                            applyEta(stopKey, route.key, slots)
                         }
                     }
                 }
@@ -732,7 +756,16 @@ class AppModel(initial: Snapshot) {
                         val sideId = "${station.sta}|${line.code}"
                         if (sideId !in mtrSide && (pair.first.isNotEmpty() || pair.second.isNotEmpty())) {
                             val preferred = preferredMtrSide(pair.first, pair.second)
-                            mtrSide = mtrSide + (sideId to usefulMtrSide(line.code, station.sta, preferred))
+                            var side = usefulMtrSide(line.code, station.sta, preferred)
+                            val arriving = if (side == "down") pair.second else pair.first
+                            val dest = arriving.firstOrNull()?.dest.orEmpty()
+                            if (atDestinationTerminus(station.name, dest)) {
+                                val flipped = if (side == "down") "up" else "down"
+                                val other = if (flipped == "down") pair.second else pair.first
+                                val otherDest = other.firstOrNull()?.dest.orEmpty()
+                                if (otherDest.isBlank() || !atDestinationTerminus(station.name, otherDest)) side = flipped
+                            }
+                            mtrSide = mtrSide + (sideId to side)
                         }
                         mtr = mtr.map { row ->
                             if (row.sta != station.sta) row

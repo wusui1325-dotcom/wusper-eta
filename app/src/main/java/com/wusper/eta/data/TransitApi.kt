@@ -58,7 +58,7 @@ class TransitApi {
     }
 
     suspend fun search(q: String): SearchBundle = withContext(Dispatchers.IO) {
-        val url = "$WUSPER/search?q=${enc(q)}&limit=20"
+        val url = "$WUSPER/search?q=${enc(q)}&limit=60"
         val o = JSONObject(get(url))
         SearchBundle(
             stops = (o.optJSONArray("stops") ?: JSONArray()).let { arr ->

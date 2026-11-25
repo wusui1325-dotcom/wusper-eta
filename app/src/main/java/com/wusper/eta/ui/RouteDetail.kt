@@ -251,7 +251,7 @@ private fun StopEtaRow(
     val none = stringResource(R.string.none)
     val more = stringResource(R.string.cd_more_eta)
     val eta = when {
-        next == null -> "–"
+        next == null -> ""
         next.minutes == null -> none
         else -> "${next.minutes}′"
     }

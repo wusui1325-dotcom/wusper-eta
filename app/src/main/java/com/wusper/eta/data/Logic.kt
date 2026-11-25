@@ -100,10 +100,42 @@ fun atDestinationTerminus(stopName: String, dest: String): Boolean {
     val stop = stopName.replace(" ", "")
     val bound = dest.replace(" ", "")
     if (stop.length < 2 || bound.length < 2) return false
-    if (stop == bound || stop.startsWith(bound)) return true
-    val stopHead = stop.substringBefore('(').substringBefore('（')
-    val destHead = bound.substringBefore('(').substringBefore('（')
-    return stopHead.length >= 2 && stopHead == destHead
+    if (stop == bound || stop.startsWith(bound) || bound.startsWith(stop)) return true
+    val stopHead = headName(stop)
+    val destHead = headName(bound)
+    if (stopHead.length >= 2 && stopHead == destHead) return true
+    val inner = innerName(bound)
+    return inner.length >= 2 && (stop.contains(inner) || stopHead.contains(inner))
+}
+
+private fun headName(value: String): String =
+    value.substringBefore('(').substringBefore('（').substringBefore(',').substringBefore('，')
+
+private fun innerName(value: String): String {
+    val open = value.indexOfAny(charArrayOf('(', '（'))
+    val close = value.indexOfAny(charArrayOf(')', '）'))
+    if (open < 0 || close <= open) return ""
+    return value.substring(open + 1, close)
+}
+
+fun routeSearchRank(query: String, route: String, dest: String): Int? {
+    val q = query.trim()
+    if (q.isEmpty()) return null
+    if (route.equals(q, ignoreCase = true)) return 0
+    if (route.startsWith(q, ignoreCase = true)) return 1
+    if (route.contains(q, ignoreCase = true)) return 2
+    if (dest.contains(q, ignoreCase = true)) return 3
+    return null
+}
+
+fun dedupeRouteHits(routes: List<Route>): List<Route> {
+    val seen = LinkedHashSet<String>()
+    val out = ArrayList<Route>()
+    for (route in routes) {
+        val key = "${route.co}|${route.route}|${route.dir}|${route.dest}"
+        if (seen.add(key)) out.add(route)
+    }
+    return out
 }
 
 fun usefulMtrSide(lineCode: String, sta: String, fallback: String): String {
