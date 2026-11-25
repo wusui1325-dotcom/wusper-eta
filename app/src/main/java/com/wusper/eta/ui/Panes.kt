@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -45,7 +47,7 @@ import com.wusper.eta.data.Filter
 import com.wusper.eta.data.Help
 import com.wusper.eta.data.MtrLine
 import com.wusper.eta.data.MtrStop
-import com.wusper.eta.data.Place
+import com.wusper.eta.data.RideLeg
 import com.wusper.eta.data.Route
 import com.wusper.eta.data.SavedStop
 import com.wusper.eta.data.Stop
@@ -53,8 +55,6 @@ import com.wusper.eta.data.TripPlan
 import com.wusper.eta.data.accepts
 import com.wusper.eta.data.formatMeters
 import com.wusper.eta.data.toSaved
-
-enum class PlanPart { All, Form, Result }
 
 @Composable
 fun NearbyPane(model: AppModel, inline: Boolean) {
@@ -250,79 +250,82 @@ fun SavedPane(model: AppModel) {
 }
 
 @Composable
-fun PlanPane(model: AppModel, part: PlanPart) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 16.dp),
-    ) {
-        if (part != PlanPart.Result) {
-            Bar(Glyphs.plan, stringResource(R.string.tab_plan), null, { model.help = it }) {
-                InkButton(Glyphs.go, stringResource(R.string.cd_go), label = stringResource(R.string.cd_go)) { model.runPlan() }
-            }
-            Column(Modifier.padding(horizontal = 28.dp)) {
-                PlaceEditor(Glyphs.hereOrigin, stringResource(R.string.origin), model.originText, model.planPick == "o", model.planHits, { model.editPlace("o", it) }, { model.pickPlace(it) })
-                Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    InkButton(Glyphs.hereOrigin, stringResource(R.string.cd_here_origin), label = stringResource(R.string.origin)) { model.useHere("o") }
-                    Spacer(Modifier.width(8.dp))
-                    InkButton(Glyphs.swap, stringResource(R.string.cd_swap), label = stringResource(R.string.cd_swap)) { model.swapEnds() }
-                    Spacer(Modifier.width(8.dp))
-                    InkButton(Glyphs.hereDest, stringResource(R.string.cd_here_dest), label = stringResource(R.string.dest)) { model.useHere("d") }
+fun NavPane(model: AppModel) {
+    val ready = model.origin != null && model.dest != null && model.navHits.isEmpty()
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(Modifier.widthIn(max = 640.dp).fillMaxHeight()) {
+            Column(Modifier.padding(horizontal = 28.dp, vertical = 8.dp)) {
+                NavField(
+                    label = stringResource(R.string.origin),
+                    value = model.originText,
+                    chosen = model.origin != null,
+                    onFocus = { model.focusNav("o") },
+                    onValue = { model.editNav("o", it) },
+                )
+                Spacer(Modifier.height(16.dp))
+                NavField(
+                    label = stringResource(R.string.dest),
+                    value = model.destText,
+                    chosen = model.dest != null,
+                    onFocus = { model.focusNav("d") },
+                    onValue = { model.editNav("d", it) },
+                )
+                if (ready) {
+                    Spacer(Modifier.height(8.dp))
+                    InkButton(
+                        Glyphs.go,
+                        stringResource(R.string.nav_confirm),
+                        label = stringResource(R.string.nav_confirm),
+                    ) { model.confirmNav() }
                 }
-                PlaceEditor(Glyphs.hereDest, stringResource(R.string.dest), model.destText, model.planPick == "d", model.planHits, { model.editPlace("d", it) }, { model.pickPlace(it) })
-                Spacer(Modifier.height(10.dp))
-                Row {
-                    InkButton(Glyphs.stepWalk, stringResource(R.string.walk), model.planMode == "walk", label = stringResource(R.string.walk)) { model.setMode("walk") }
-                    Spacer(Modifier.width(8.dp))
-                    InkButton(Glyphs.stepRide, stringResource(R.string.transit), model.planMode == "transit", label = stringResource(R.string.transit)) { model.setMode("transit") }
-                }
             }
-        }
-        if (part != PlanPart.Form) {
-            val plan = model.plan?.takeUnless { it.mock }
-            if (model.planFailed) {
-                FailRow { model.runPlan() }
-            } else if (plan != null) {
-                PlanResult(plan)
-            } else if (model.planUnavailable || model.plan?.mock == true) {
-                PlanUnavailable { model.help = Help.Mock }
+            val plan = model.plan
+            when {
+                model.navHits.isNotEmpty() -> {
+                    LazyColumn(Modifier.weight(1f).padding(horizontal = 28.dp)) {
+                        itemsIndexed(model.navHits, key = { index, hit -> "$index|${hit.name}|${hit.lat}|${hit.lng}" }, contentType = { _, _ -> "stop" }) { _, hit ->
+                            NameRow(hit.name, hit.nameEn) { model.pickNav(hit) }
+                        }
+                    }
+                }
+                model.planFailed -> FailRow { model.confirmNav() }
+                model.planUnavailable || plan?.mock == true -> {
+                    PlanUnavailable { model.help = Help.Mock }
+                }
+                plan != null -> RideResult(plan, Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun PlaceEditor(
-    icon: ImageVector,
+private fun NavField(
     label: String,
     value: String,
-    active: Boolean,
-    hits: List<Place>,
+    chosen: Boolean,
+    onFocus: () -> Unit,
     onValue: (String) -> Unit,
-    onPick: (Place) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Glyph(icon, null, Ink.black, 16.dp)
-        Spacer(Modifier.width(6.dp))
-        BasicText(label, style = Ink.small)
-    }
-    FieldLine(value, label, onValue)
-    if (active) {
-        hits.forEach { place ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 40.dp)
-                    .clickable(remember { MutableInteractionSource() }, null) { onPick(place) }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                BasicText(place.name, style = Ink.body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        BasicText(label, style = Ink.meta, modifier = Modifier.weight(1f))
+        if (value.isNotEmpty()) {
+            InkButton(Glyphs.close, stringResource(R.string.cd_clear), label = stringResource(R.string.cd_clear)) {
+                onValue("")
             }
-            Hair()
         }
     }
+    Box(Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.CenterStart) {
+        if (value.isEmpty()) BasicText(label, style = Ink.meta)
+        BasicTextField(
+            value = value,
+            onValueChange = onValue,
+            textStyle = if (chosen) Ink.body else Ink.body,
+            singleLine = true,
+            cursorBrush = SolidColor(Ink.black),
+            modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) onFocus() },
+        )
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(if (chosen) Ink.black else Ink.line))
 }
 
 @Composable
@@ -338,28 +341,60 @@ private fun PlanUnavailable(onHelp: () -> Unit) {
 }
 
 @Composable
-private fun PlanResult(plan: TripPlan) {
-    Column(Modifier.padding(horizontal = 28.dp, vertical = 12.dp)) {
-        BasicText(stringResource(R.string.minutes_n, plan.minutes), style = Ink.title)
-        if (plan.meters > 0) {
-            BasicText(formatMeters(plan.meters), style = Ink.meta)
+private fun RideResult(plan: TripPlan, modifier: Modifier) {
+    Column(
+        modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp, vertical = 8.dp),
+    ) {
+        val range = if (plan.minutes == plan.minutesMax) {
+            stringResource(R.string.minutes_n, plan.minutes)
+        } else {
+            stringResource(R.string.nav_range, plan.minutes, plan.minutesMax)
         }
-        plan.steps.forEach { step ->
-            Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.Top) {
-                Glyph(if (step.mode == "transit") Glyphs.stepRide else Glyphs.stepWalk, null, Ink.black, 18.dp)
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    BasicText(step.title, style = Ink.body)
-                    if (step.detail.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        BasicText(step.detail, style = Ink.meta)
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                BasicText(stringResource(R.string.minutes_n, step.minutes), style = Ink.small)
-            }
-            Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+        BasicText(range, style = Ink.display)
+        Spacer(Modifier.height(12.dp))
+        plan.rides.forEach { ride ->
+            RideRow(ride)
         }
+        if (plan.walkMinutes > 0) {
+            Spacer(Modifier.height(12.dp))
+            BasicText(stringResource(R.string.nav_walk_min, plan.walkMinutes), style = Ink.meta)
+        }
+    }
+}
+
+@Composable
+private fun RideRow(ride: RideLeg) {
+    val kind = when (ride.kind) {
+        "gmb" -> stringResource(R.string.nav_gmb)
+        "rail" -> stringResource(R.string.nav_rail)
+        else -> stringResource(R.string.nav_bus)
+    }
+    val time = if (ride.minutes == ride.minutesMax) {
+        stringResource(R.string.minutes_n, ride.minutes)
+    } else {
+        stringResource(R.string.nav_range, ride.minutes, ride.minutesMax)
+    }
+    val path = when {
+        ride.board.isNotBlank() && ride.alight.isNotBlank() -> "${ride.board} → ${ride.alight}"
+        ride.board.isNotBlank() -> ride.board
+        else -> ride.alight
+    }
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            BasicText(kind, style = Ink.meta)
+            Spacer(Modifier.width(8.dp))
+            BasicText(ride.name, style = Ink.route, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(8.dp))
+            BasicText(time, style = Ink.minute)
+        }
+        if (path.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            BasicText(path, style = Ink.body)
+        }
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
     }
 }
 

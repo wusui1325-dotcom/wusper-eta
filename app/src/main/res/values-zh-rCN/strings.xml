@@ -73,6 +73,12 @@
     <string name="cd_clear">清除</string>
     <string name="cd_swap">对调起点与终点</string>
     <string name="cd_go">规划</string>
+    <string name="nav_confirm">确定</string>
+    <string name="nav_range">%1$d～%2$d 分钟</string>
+    <string name="nav_bus">巴士</string>
+    <string name="nav_gmb">小巴</string>
+    <string name="nav_rail">铁路</string>
+    <string name="nav_walk_min">步行 %1$d 分钟</string>
     <string name="cd_here_origin">用目前位置作出发</string>
     <string name="cd_here_dest">用目前位置作目的地</string>
     <string name="cd_retry">重试</string>

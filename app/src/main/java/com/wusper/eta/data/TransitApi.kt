@@ -412,21 +412,72 @@ class TransitApi {
             return@withContext null
         }
         if (!root.optBoolean("ok")) return@withContext null
-        val minutes = (root.optDouble("duration_s", 0.0) / 60.0).toInt().coerceAtLeast(0)
+        val duration = root.optDouble("duration_s", 0.0)
+        val span = minuteSpan(root.optDouble("duration_min_s", duration), root.optDouble("duration_max_s", duration))
         val meters = root.optInt("distance_m", root.optDouble("distance_m", 0.0).toInt())
-        val steps = buildList {
-            val arr = root.optJSONArray("steps") ?: JSONArray()
-            for (i in 0 until arr.length()) {
-                val step = arr.optJSONObject(i) ?: continue
-                val ride = step.optString("type") == "transit"
-                val route = step.optString("route")
-                val towards = step.optString("towards")
-                val stepMin = (step.optDouble("duration_s", 0.0) / 60.0).toInt().coerceAtLeast(0)
-                val (title, detail) = planCopy(spokenLines(step), ride, route, towards)
-                add(PlanStep(if (ride) "transit" else "walk", title, detail, stepMin))
+        val rides = ArrayList<RideLeg>()
+        var walkSeconds = 0.0
+        val arr = root.optJSONArray("steps") ?: JSONArray()
+        for (i in 0 until arr.length()) {
+            val step = arr.optJSONObject(i) ?: continue
+            if (step.optString("type") == "transit") {
+                val route = step.optString("route").trim()
+                val instruction = step.optString("instruction")
+                val name = route.ifBlank { instruction.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim() }
+                val board = stopName(step, boardKeys)
+                val alight = stopName(step, alightKeys)
+                if (name.isBlank() && board.isBlank() && alight.isBlank()) continue
+                val legSpan = minuteSpan(
+                    step.optDouble("duration_min_s", step.optDouble("duration_s", 0.0)),
+                    step.optDouble("duration_max_s", step.optDouble("duration_s", 0.0)),
+                )
+                rides.add(
+                    RideLeg(
+                        kind = vehicleKind(route, instruction, step.optString("vehicle").ifBlank { step.optString("vehicle_type") }, step.optString("co")),
+                        name = name,
+                        board = board,
+                        alight = alight,
+                        minutes = legSpan.first,
+                        minutesMax = legSpan.second,
+                    ),
+                )
+            } else {
+                walkSeconds += step.optDouble("duration_s", 0.0)
             }
         }
-        TripPlan(false, minutes, meters, steps, "")
+        TripPlan(false, span.first, meters, emptyList(), "", span.second, rides, roundedMinutes(walkSeconds))
+    }
+
+    private val boardKeys = listOf(
+        "board", "board_stop", "board_name", "boarding", "boarding_stop",
+        "from", "from_stop", "departure_stop", "origin_stop",
+    )
+
+    private val alightKeys = listOf(
+        "alight", "alight_stop", "alight_name", "alighting", "alighting_stop",
+        "to", "to_stop", "arrival_stop", "destination_stop",
+    )
+
+    private fun stopName(step: JSONObject, keys: List<String>): String {
+        fun from(obj: JSONObject): String {
+            for (key in keys) {
+                val value = namedStop(obj, key)
+                if (value.isNotBlank() && !exitLabel(value)) return value
+            }
+            return ""
+        }
+        from(step).takeIf { it.isNotBlank() }?.let { return it }
+        val nested = step.optJSONObject("transit") ?: step.optJSONObject("transit_details") ?: return ""
+        return from(nested)
+    }
+
+    private fun namedStop(obj: JSONObject, key: String): String {
+        if (!obj.has(key) || obj.isNull(key)) return ""
+        return when (val raw = obj.opt(key)) {
+            is String -> raw.trim()
+            is JSONObject -> raw.optString("name_tc").ifBlank { raw.optString("name") }.ifBlank { raw.optString("text") }.trim()
+            else -> ""
+        }
     }
 
     private fun readSeq(row: JSONObject, fallback: Int): Int {
@@ -437,45 +488,6 @@ class TransitApi {
             else -> raw?.toString().orEmpty()
         }
         return parseStopSeq(text, fallback)
-    }
-
-    private fun spokenLines(step: JSONObject): List<String> {
-        val lines = ArrayList<String>()
-        fun add(raw: String?) {
-            plainGoogle(raw).lineSequence().map { it.trim() }.filter { it.isNotBlank() }.forEach { line ->
-                if (lines.none { it == line }) lines.add(line)
-            }
-        }
-        add(step.optString("instruction"))
-        for (key in listOf("lines", "details", "instructions", "sub_instructions", "substeps")) {
-            when (val value = if (step.has(key)) step.opt(key) else null) {
-                is String -> add(value)
-                is JSONArray -> {
-                    for (i in 0 until value.length()) {
-                        when (val item = value.opt(i)) {
-                            is String -> add(item)
-                            is JSONObject -> {
-                                add(item.optString("instruction"))
-                                add(item.optString("text"))
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return lines
-    }
-
-    private fun plainGoogle(raw: String?): String {
-        if (raw.isNullOrBlank()) return ""
-        return raw
-            .replace(Regex("(?i)<br\\s*/?>"), "\n")
-            .replace(Regex("<[^>]+>"), "")
-            .replace("&nbsp;", " ")
-            .replace("&amp;", "&")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .trim()
     }
 
     private fun endpoint(place: Place): JSONObject {

@@ -56,7 +56,7 @@ class AppModel(initial: Snapshot) {
     var planFailed by mutableStateOf(false)
     var planUnavailable by mutableStateOf(false)
     var planPick by mutableStateOf("")
-    var planHits by mutableStateOf<List<Place>>(emptyList())
+    var navHits by mutableStateOf<List<NavHit>>(emptyList())
     var bounds by mutableStateOf<List<BoundHit>>(emptyList())
     var shownBound by mutableStateOf<Map<String, BoundHit>>(emptyMap())
     var boundState by mutableStateOf<Map<String, EtaState>>(emptyMap())
@@ -631,20 +631,62 @@ class AppModel(initial: Snapshot) {
         }
     }
 
-    fun editPlace(which: String, text: String) {
+    fun focusNav(which: String) {
         planPick = which
-        if (which == "o") {
-            originText = text
-            origin = null
-        } else {
-            destText = text
-            dest = null
-        }
-        placeJob?.cancel()
-        if (text.isBlank()) {
-            planHits = emptyList()
+        val chosen = if (which == "d") dest else origin
+        val text = if (which == "d") destText else originText
+        if (chosen != null || text.isBlank()) {
+            navHits = emptyList()
             return
         }
+        searchNav(which, text)
+    }
+
+    fun editNav(which: String, text: String) {
+        planPick = which
+        if (which == "d") {
+            destText = text
+            dest = null
+        } else {
+            originText = text
+            origin = null
+        }
+        plan = null
+        planFailed = false
+        planUnavailable = false
+        if (text.isBlank()) {
+            navHits = emptyList()
+            placeJob?.cancel()
+            return
+        }
+        searchNav(which, text)
+    }
+
+    fun pickNav(hit: NavHit) {
+        val place = Place(hit.name, hit.lat, hit.lng)
+        if (planPick == "d") {
+            dest = place
+            destText = hit.name
+        } else {
+            origin = place
+            originText = hit.name
+        }
+        navHits = emptyList()
+        plan = null
+        planFailed = false
+        planUnavailable = false
+        persist()
+    }
+
+    fun confirmNav() {
+        if (origin == null || dest == null) return
+        navHits = emptyList()
+        planMode = "transit"
+        runPlan()
+    }
+
+    private fun searchNav(which: String, text: String) {
+        placeJob?.cancel()
         placeJob = scope.launch {
             delay(160)
             val hits = try {
@@ -652,53 +694,13 @@ class AppModel(initial: Snapshot) {
             } catch (_: Exception) {
                 return@launch
             }
-            if (planPick != which) return@launch
-            val fromStops = hits.stops.take(6).map { Place(it.name, it.lat, it.lng) }
-            val fromMtr = hits.mtr.mapNotNull { station ->
-                val geo = index?.stations?.firstOrNull { it.sta == station.sta } ?: return@mapNotNull null
-                Place(station.name, geo.lat, geo.lng)
+            val current = if (which == "d") destText else originText
+            if (planPick != which || current != text) return@launch
+            if ((if (which == "d") dest else origin) != null) return@launch
+            navHits = stationHits(text, hits.stops, hits.mtr) { sta ->
+                index?.stations?.firstOrNull { it.sta == sta }?.let { it.lat to it.lng }
             }
-            planHits = (fromStops + fromMtr).take(8)
         }
-    }
-
-    fun pickPlace(place: Place) {
-        if (planPick == "d") {
-            dest = place
-            destText = place.name
-        } else {
-            origin = place
-            originText = place.name
-        }
-        planHits = emptyList()
-        persist()
-    }
-
-    fun swapEnds() {
-        val o = origin
-        val d = dest
-        val ot = originText
-        val dt = destText
-        origin = d
-        dest = o
-        originText = dt
-        destText = ot
-    }
-
-    fun useHere(which: String) {
-        val place = Place("目前位置", lat, lng)
-        if (which == "d") {
-            dest = place
-            destText = place.name
-        } else {
-            origin = place
-            originText = place.name
-        }
-        pullLocation()
-    }
-
-    fun setMode(mode: String) {
-        planMode = mode
     }
 
     fun runPlan() {
@@ -715,7 +717,8 @@ class AppModel(initial: Snapshot) {
                 planFailed = true
                 null
             }
-            if (result != null && !result.mock) {
+            val usable = result != null && !result.mock && (result.rides.isNotEmpty() || result.walkMinutes > 0)
+            if (usable) {
                 plan = result
                 planFailed = false
                 planUnavailable = false

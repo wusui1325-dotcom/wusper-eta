@@ -16,7 +16,11 @@ import com.wusper.eta.data.matchesStopName
 import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.mtrLineOrder
+import com.wusper.eta.data.Stop
 import com.wusper.eta.data.exitLabel
+import com.wusper.eta.data.minuteSpan
+import com.wusper.eta.data.stationHits
+import com.wusper.eta.data.vehicleKind
 import com.wusper.eta.data.fallbackPlanTitle
 import com.wusper.eta.data.inStopOrder
 import com.wusper.eta.data.nearestStop
@@ -154,6 +158,27 @@ class LogicTest {
             .inStopOrder { it.first }
             .map { it.first }
         assertEquals(listOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14), ordered)
+    }
+
+    @Test
+    fun stationSearchUsesNamesNotStopIds() {
+        val stop = Stop(
+            key = "CTB|001050",
+            co = "CTB",
+            id = "001050",
+            name = "歷山大廈, 德輔道中",
+            meters = 0,
+            lat = 22.28,
+            lng = 114.15,
+            routes = emptyList(),
+            nameEn = "Alexandra House",
+        )
+        assertTrue(stationHits("001050", listOf(stop), emptyList()) { null }.isEmpty())
+        assertEquals("歷山大廈, 德輔道中", stationHits("Alexandra", listOf(stop), emptyList()) { null }.first().name)
+        assertEquals("rail", vehicleKind("東鐵綫", "地下鐵 開往金鐘", "", ""))
+        assertEquals("gmb", vehicleKind("20C", "", "", "GMB"))
+        assertEquals("bus", vehicleKind("71K", "", "", "KMB"))
+        assertEquals(45 to 60, minuteSpan(2700.0, 3600.0))
     }
 
     @Test

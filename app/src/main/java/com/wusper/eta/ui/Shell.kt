@@ -165,7 +165,7 @@ private fun SectionBody(model: AppModel) {
             Tab.Bus -> BusHome(model)
             Tab.Mtr -> MtrHome(model)
             Tab.Search -> SearchPane(model)
-            Tab.Nav -> PlanPane(model, part = PlanPart.All)
+            Tab.Nav -> NavPane(model)
         }
     }
 }

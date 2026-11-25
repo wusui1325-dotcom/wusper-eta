@@ -73,6 +73,12 @@
     <string name="cd_clear">Clear</string>
     <string name="cd_swap">Swap</string>
     <string name="cd_go">Plan</string>
+    <string name="nav_confirm">Confirm</string>
+    <string name="nav_range">%1$d–%2$d min</string>
+    <string name="nav_bus">Bus</string>
+    <string name="nav_gmb">Minibus</string>
+    <string name="nav_rail">Rail</string>
+    <string name="nav_walk_min">Walk %1$d min</string>
     <string name="cd_here_origin">Use current location as start</string>
     <string name="cd_here_dest">Use current location as end</string>
     <string name="cd_retry">Retry</string>

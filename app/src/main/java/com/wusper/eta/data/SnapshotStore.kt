@@ -257,7 +257,36 @@ private fun JSONObject.plan(): TripPlan {
             }
         }
     }
-    return TripPlan(optBoolean("mock", false), optInt("min", 0), optInt("m", 0), parsed, s("poly"))
+    val rides = buildList {
+        val arr = optJSONArray("rides")
+        if (arr != null) {
+            for (i in 0 until arr.length()) {
+                val r = arr.optJSONObject(i) ?: continue
+                val min = r.optInt("min", 0)
+                add(
+                    RideLeg(
+                        kind = r.s("kind"),
+                        name = r.s("name"),
+                        board = r.s("board"),
+                        alight = r.s("alight"),
+                        minutes = min,
+                        minutesMax = r.optInt("max", min),
+                    ),
+                )
+            }
+        }
+    }
+    val minutes = optInt("min", 0)
+    return TripPlan(
+        optBoolean("mock", false),
+        minutes,
+        optInt("m", 0),
+        parsed,
+        s("poly"),
+        optInt("max", minutes),
+        rides,
+        optInt("walk", 0),
+    )
 }
 
 private fun Stop.json(): JSONObject = JSONObject().apply {
@@ -333,6 +362,8 @@ private fun Place.json(): JSONObject = JSONObject().put("name", name).put("lat",
 private fun TripPlan.json(): JSONObject = JSONObject().apply {
     put("mock", mock)
     put("min", minutes)
+    put("max", minutesMax)
+    put("walk", walkMinutes)
     put("m", meters)
     put("poly", poly)
     put(
@@ -345,6 +376,22 @@ private fun TripPlan.json(): JSONObject = JSONObject().apply {
                         .put("title", step.title)
                         .put("detail", step.detail)
                         .put("min", step.minutes),
+                )
+            }
+        },
+    )
+    put(
+        "rides",
+        JSONArray().apply {
+            rides.take(12).forEach { ride ->
+                put(
+                    JSONObject()
+                        .put("kind", ride.kind)
+                        .put("name", ride.name)
+                        .put("board", ride.board)
+                        .put("alight", ride.alight)
+                        .put("min", ride.minutes)
+                        .put("max", ride.minutesMax),
                 )
             }
         },

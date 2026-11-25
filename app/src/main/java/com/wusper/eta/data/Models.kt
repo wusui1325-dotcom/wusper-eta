@@ -122,7 +122,18 @@ data class SavedStop(
 
 data class Place(val name: String, val lat: Double, val lng: Double)
 
+data class NavHit(val name: String, val nameEn: String, val lat: Double, val lng: Double)
+
 data class PlanStep(val mode: String, val title: String, val detail: String, val minutes: Int)
+
+data class RideLeg(
+    val kind: String,
+    val name: String,
+    val board: String,
+    val alight: String,
+    val minutes: Int,
+    val minutesMax: Int = minutes,
+)
 
 data class TripPlan(
     val mock: Boolean,
@@ -130,6 +141,9 @@ data class TripPlan(
     val meters: Int,
     val steps: List<PlanStep>,
     val poly: String,
+    val minutesMax: Int = minutes,
+    val rides: List<RideLeg> = emptyList(),
+    val walkMinutes: Int = 0,
 )
 
 sealed class RouteFocus {

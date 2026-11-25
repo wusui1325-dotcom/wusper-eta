@@ -73,6 +73,70 @@ fun matchesStopName(query: String, nameZh: String, nameEn: String): Boolean {
     return nameZh.contains(q, ignoreCase = true) || nameEn.contains(q, ignoreCase = true)
 }
 
+fun stationHits(query: String, stops: List<Stop>, mtr: List<MtrStop>, geo: (String) -> Pair<Double, Double>?): List<NavHit> {
+    val ranked = ArrayList<Triple<Int, Int, NavHit>>()
+    val seen = HashSet<String>()
+    var index = 0
+    for (stop in stops) {
+        if (!matchesStopName(query, stop.name, stop.nameEn)) continue
+        val key = "${stop.name.lowercase()}|${stop.nameEn.lowercase()}|${"%.4f".format(stop.lat)}|${"%.4f".format(stop.lng)}"
+        if (!seen.add(key)) continue
+        val hit = NavHit(stop.name, stop.nameEn, stop.lat, stop.lng)
+        ranked.add(Triple(nameRank(query, stop.name, stop.nameEn), index, hit))
+        index += 1
+    }
+    for (station in mtr) {
+        if (!matchesStopName(query, station.name, station.nameEn)) continue
+        if (!seen.add("mtr|${station.sta}")) continue
+        val placed = geo(station.sta)
+        val hit = NavHit(
+            station.name,
+            station.nameEn,
+            placed?.first ?: station.lat,
+            placed?.second ?: station.lng,
+        )
+        ranked.add(Triple(nameRank(query, station.name, station.nameEn), index, hit))
+        index += 1
+    }
+    return ranked.sortedWith(compareBy({ it.first }, { it.second })).map { it.third }.take(16)
+}
+
+private fun nameRank(query: String, nameZh: String, nameEn: String): Int {
+    val q = query.trim()
+    if (nameZh.equals(q, ignoreCase = true) || nameEn.equals(q, ignoreCase = true)) return 0
+    if (nameZh.startsWith(q, ignoreCase = true) || nameEn.startsWith(q, ignoreCase = true)) return 1
+    return 2
+}
+
+fun minuteSpan(minSeconds: Double, maxSeconds: Double): Pair<Int, Int> {
+    val min = roundedMinutes(minSeconds)
+    val max = roundedMinutes(maxSeconds).coerceAtLeast(min)
+    return min to max
+}
+
+fun roundedMinutes(seconds: Double): Int {
+    if (seconds <= 0.0) return 0
+    return (seconds / 60.0).roundToInt().coerceAtLeast(1)
+}
+
+fun vehicleKind(route: String, instruction: String, vehicle: String, co: String): String {
+    val kind = vehicle.trim().uppercase()
+    val company = co.trim().uppercase()
+    val text = "$route $instruction"
+    if (company == "GMB" || kind.contains("MINIBUS") || text.contains("小巴")) return "gmb"
+    if (
+        company == "MTR" ||
+        kind in setOf("SUBWAY", "RAIL", "METRO_RAIL", "HEAVY_RAIL", "COMMUTER_TRAIN", "HIGH_SPEED_TRAIN", "MONORAIL", "TRAM") ||
+        text.contains("港鐵") ||
+        text.contains("地下鐵") ||
+        route.contains("綫") ||
+        route.contains("線")
+    ) {
+        return "rail"
+    }
+    return "bus"
+}
+
 fun oppositeDir(dir: String): String? = when (dir.trim().uppercase()) {
     "I", "INBOUND" -> "O"
     "O", "OUTBOUND" -> "I"
