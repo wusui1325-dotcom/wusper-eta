@@ -7,11 +7,18 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.math.asin
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
 private val HK: ZoneId = ZoneId.of("Asia/Hong_Kong")
+
+/** One scale for both axes. Callers letterbox the leftover space. */
+fun uniformFit(viewW: Float, viewH: Float, imgW: Float, imgH: Float): Float {
+    if (viewW <= 0f || viewH <= 0f || imgW <= 0f || imgH <= 0f) return 1f
+    return min(viewW / imgW, viewH / imgH)
+}
 
 fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
     val r = 6_371_000.0

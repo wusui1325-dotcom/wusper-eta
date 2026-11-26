@@ -59,6 +59,41 @@ const val METRO_CACHE_MS: Long = 30L * 24 * 60 * 60 * 1000
 fun metroCacheFresh(savedAt: Long, now: Long): Boolean =
     savedAt > 0L && now >= savedAt && now - savedAt < METRO_CACHE_MS
 
+data class MetroBounds(val minX: Float, val minY: Float, val width: Float, val height: Float)
+
+/** Bounds of the tools/metro schematic, padded the same way as that page. */
+fun metroBounds(network: MetroNetwork): MetroBounds? {
+    var minX = Double.POSITIVE_INFINITY
+    var minY = Double.POSITIVE_INFINITY
+    var maxX = Double.NEGATIVE_INFINITY
+    var maxY = Double.NEGATIVE_INFINITY
+    fun consider(x: Double?, y: Double?) {
+        if (x == null || y == null || x.isNaN() || y.isNaN()) return
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+    }
+    for (line in network.lines) {
+        for ((x, y) in line.path) consider(x, y)
+        for (station in line.stations) consider(station.x, station.y)
+    }
+    if (minX == Double.POSITIVE_INFINITY) return null
+    val pad = 40.0
+    return MetroBounds(
+        (minX - pad).toFloat(),
+        (minY - pad).toFloat(),
+        ((maxX - minX) + pad * 2).toFloat(),
+        ((maxY - minY) + pad * 2).toFloat(),
+    )
+}
+
+/** Label size in schematic units. Same clamp as tools/metro: never zero, never dropped. */
+fun metroLabelUserSize(worldWidth: Float, scale: Float): Float {
+    val zoomLevel = worldWidth / scale.coerceAtLeast(0.05f)
+    return (2000f / zoomLevel.coerceAtLeast(120f)).coerceIn(12f, 20f)
+}
+
 fun planMetro(network: MetroNetwork, fromName: String, toName: String): MetroRide? {
     if (fromName.isBlank() || fromName == toName) return null
     val lines = network.lines
@@ -219,6 +254,38 @@ private fun xml(value: String): String = value
     .replace(">", "&gt;")
     .replace("\"", "&quot;")
 
+data class MetroPoster(val url: String?, val asset: String?, val source: String)
+
+fun blockedMapUrl(url: String): Boolean {
+    val host = url.substringAfter("://", "").substringBefore("/").substringBefore("?").lowercase()
+    return "amap." in host || host.endsWith("googleapis.com")
+}
+
+fun isRasterImage(bytes: ByteArray): Boolean {
+    if (bytes.size < 12) return false
+    val png = bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte() && bytes[2] == 0x4E.toByte()
+    val jpeg = bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
+    val webp = bytes[0] == 0x52.toByte() && bytes[1] == 0x49.toByte() && bytes[8] == 0x57.toByte() && bytes[9] == 0x45.toByte()
+    return png || jpeg || webp
+}
+
+fun parsePosters(text: String): Map<String, MetroPoster> {
+    val root = JSONObject(text)
+    val out = HashMap<String, MetroPoster>()
+    val keys = root.keys()
+    while (keys.hasNext()) {
+        val id = keys.next()
+        val row = root.optJSONObject(id) ?: continue
+        val url = row.optString("url").ifBlank { null }
+        val asset = row.optString("asset").ifBlank { null }
+        val source = row.optString("source")
+        if (url == null && asset == null) continue
+        if (url != null && blockedMapUrl(url)) continue
+        out[id] = MetroPoster(url, asset, source)
+    }
+    return out
+}
+
 object MetroStore {
     private const val UA =
         "Mozilla/5.0 (Linux; Android 14; WusperETA) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
@@ -256,6 +323,43 @@ object MetroStore {
         file.writeText(root.toString())
     }
 
+    fun poster(context: Context, id: String): MetroPoster? {
+        val text = context.assets.open("metro_maps.json").bufferedReader().use { it.readText() }
+        return parsePosters(text)[id]
+    }
+
+    fun readPoster(context: Context, id: String, key: String, now: Long): ByteArray? {
+        val meta = posterMeta(context, id, key)
+        val bin = posterBin(context, id, key)
+        if (!meta.isFile || !bin.isFile) return null
+        return try {
+            val saved = meta.readText().trim().toLongOrNull() ?: return null
+            if (!metroCacheFresh(saved, now)) return null
+            val bytes = bin.readBytes()
+            if (!isRasterImage(bytes)) null else bytes
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun writePoster(context: Context, id: String, key: String, bytes: ByteArray, now: Long) {
+        if (!isRasterImage(bytes)) return
+        val bin = posterBin(context, id, key)
+        bin.parentFile?.mkdirs()
+        bin.writeBytes(bytes)
+        posterMeta(context, id, key).writeText(now.toString())
+    }
+
+    fun fetchPoster(url: String): ByteArray? {
+        if (blockedMapUrl(url)) return null
+        return try {
+            val bytes = getBytes(url)
+            if (isRasterImage(bytes)) bytes else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun fetch(id: String, key: String): MetroNetwork? = try {
         val url = "https://wusper.com/api/metro/network?id=${enc(id)}&key=${enc(key)}"
         val root = JSONObject(get(url))
@@ -269,14 +373,18 @@ object MetroStore {
         return File(File(context.filesDir, "metro"), "$safe.json")
     }
 
+    private fun posterBin(context: Context, id: String, key: String): File {
+        val safe = "${id}_${key}".replace(Regex("[^A-Za-z0-9_-]"), "")
+        return File(File(context.filesDir, "metro"), "${safe}.img")
+    }
+
+    private fun posterMeta(context: Context, id: String, key: String): File {
+        val safe = "${id}_${key}".replace(Regex("[^A-Za-z0-9_-]"), "")
+        return File(File(context.filesDir, "metro"), "${safe}.imgat")
+    }
+
     private fun get(url: String): String {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 4000
-            readTimeout = 8000
-            requestMethod = "GET"
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("User-Agent", UA)
-        }
+        val conn = open(url, "application/json", 4_000, 8_000)
         try {
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
@@ -285,6 +393,28 @@ object MetroStore {
             return body
         } finally {
             conn.disconnect()
+        }
+    }
+
+    private fun getBytes(url: String): ByteArray {
+        val conn = open(url, "image/png,image/jpeg,image/webp,*/*", 8_000, 25_000)
+        try {
+            val code = conn.responseCode
+            if (code !in 200..299) error("HTTP $code")
+            return conn.inputStream.use { it.readBytes() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun open(url: String, accept: String, connectMs: Int, readMs: Int): HttpURLConnection {
+        return (URL(url).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = true
+            connectTimeout = connectMs
+            readTimeout = readMs
+            requestMethod = "GET"
+            setRequestProperty("Accept", accept)
+            setRequestProperty("User-Agent", UA)
         }
     }
 

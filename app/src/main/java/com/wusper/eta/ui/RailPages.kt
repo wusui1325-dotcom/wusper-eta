@@ -52,11 +52,12 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.wusper.eta.R
+import androidx.compose.ui.graphics.drawscope.withTransform
 import com.wusper.eta.data.AppModel
 import com.wusper.eta.data.RailExit
+import com.wusper.eta.data.uniformFit
 import org.json.JSONObject
 import kotlin.math.hypot
-import kotlin.math.min
 import com.wusper.eta.data.RailFocus
 import com.wusper.eta.data.UiPrefs
 import com.wusper.eta.data.atDestinationTerminus
@@ -130,7 +131,8 @@ private fun StationPane(model: AppModel, page: RailFocus.Station, modifier: Modi
     val nameEn = heavy?.nameEn ?: stop?.nameEn.orEmpty()
     val lat = heavy?.lat ?: stop?.lat ?: 0.0
     val lng = heavy?.lng ?: stop?.lng ?: 0.0
-    val exits = model.exitsOf(if (page.kind == "LRT") "" else page.id)
+    val heavyStation = page.kind != "LRT"
+    val exits = model.exitsOf(if (heavyStation) page.id else "")
     var exitsOpen by remember(page.id) { mutableStateOf(false) }
     Column(modifier.fillMaxSize()) {
         Row(
@@ -158,7 +160,7 @@ private fun StationPane(model: AppModel, page: RailFocus.Station, modifier: Modi
                 .fillMaxSize()
                 .padding(horizontal = 28.dp),
         ) {
-            if (exits.isNotEmpty()) {
+            if (heavyStation || exits.isNotEmpty()) {
                 item(key = "exits", contentType = "exits") {
                     ExitBlock(exits, exitsOpen) { exitsOpen = !exitsOpen }
                 }
@@ -335,7 +337,7 @@ private fun OfficialArt(
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.isEmpty()) break
-                        val fit = min(size.width / image.width.toFloat(), size.height / image.height.toFloat())
+                        val fit = uniformFit(size.width.toFloat(), size.height.toFloat(), image.width.toFloat(), image.height.toFloat())
                         if (pressed.size >= 2) {
                             pinch = true
                             val now = (pressed[0].position - pressed[1].position).getDistance()
@@ -389,16 +391,15 @@ private fun OfficialArt(
                 }
             },
         ) {
-            val fit = min(size.width / image.width, size.height / image.height)
-            val dw = image.width * fit * scale
-            val dh = image.height * fit * scale
+            val fit = uniformFit(size.width, size.height, image.width.toFloat(), image.height.toFloat())
             val ox = (size.width - image.width * fit) / 2f + pan.x
             val oy = (size.height - image.height * fit) / 2f + pan.y
-            drawImage(
-                image,
-                dstOffset = androidx.compose.ui.unit.IntOffset(ox.toInt(), oy.toInt()),
-                dstSize = androidx.compose.ui.unit.IntSize(dw.toInt().coerceAtLeast(1), dh.toInt().coerceAtLeast(1)),
-            )
+            withTransform({
+                translate(left = ox, top = oy)
+                scale(fit * scale, fit * scale, pivot = Offset.Zero)
+            }) {
+                drawImage(image)
+            }
         }
         Column(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             InkButton(Glyphs.zoomIn, stringResource(R.string.cd_zoom_in), label = stringResource(R.string.cd_zoom_in)) {
@@ -455,7 +456,7 @@ private fun parseArt(root: JSONObject): ArtSheet {
 }
 
 private fun screenToImage(point: Offset, viewW: Float, viewH: Float, imgW: Int, imgH: Int, scale: Float, pan: Offset): Offset {
-    val fit = min(viewW / imgW, viewH / imgH)
+    val fit = uniformFit(viewW, viewH, imgW.toFloat(), imgH.toFloat())
     val ox = (viewW - imgW * fit) / 2f + pan.x
     val oy = (viewH - imgH * fit) / 2f + pan.y
     return Offset((point.x - ox) / (fit * scale), (point.y - oy) / (fit * scale))

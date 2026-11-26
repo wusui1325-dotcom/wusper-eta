@@ -26,9 +26,13 @@ import com.wusper.eta.data.MetroLine
 import com.wusper.eta.data.MetroNames
 import com.wusper.eta.data.MetroNetwork
 import com.wusper.eta.data.MetroStation
+import com.wusper.eta.data.isRasterImage
+import com.wusper.eta.data.metroBounds
 import com.wusper.eta.data.metroCacheFresh
+import com.wusper.eta.data.metroLabelUserSize
 import com.wusper.eta.data.metroSvg
 import com.wusper.eta.data.planMetro
+import com.wusper.eta.data.uniformFit
 import com.wusper.eta.data.METRO_CACHE_MS
 import com.wusper.eta.data.mtrLineOrder
 import com.wusper.eta.data.Stop
@@ -184,6 +188,20 @@ class LogicTest {
         assertTrue(!svg.contains("stroke=\"#111111\""))
         assertTrue(metroCacheFresh(1_000L, 1_000L + METRO_CACHE_MS - 1))
         assertTrue(!metroCacheFresh(1_000L, 1_000L + METRO_CACHE_MS))
+        val fit = uniformFit(1000f, 500f, 2000f, 1172f)
+        assertEquals(2000f / 1172f, (2000f * fit) / (1172f * fit), 0.0001f)
+        assertEquals(minOf(1000f / 2000f, 500f / 1172f), fit, 0.0001f)
+        val tall = uniformFit(400f, 900f, 2000f, 1000f)
+        assertEquals(0.2f, tall, 0.0001f)
+        assertEquals(2f, (2000f * tall) / (1000f * tall), 0.0001f)
+        assertTrue(isRasterImage(byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0, 0, 0, 0, 0, 0, 0, 0)))
+        assertTrue(!isRasterImage("{\"ok\":true}".toByteArray()))
+        val bounds = metroBounds(MetroNetwork("1", "t", "測試", listOf(a.copy(color = "#E94E1B"), b)))
+        assertTrue(bounds != null && bounds.width > 0f && bounds.height > 0f)
+        val mapFit = uniformFit(360f, 640f, bounds!!.width, bounds.height)
+        assertEquals(bounds.width / bounds.height, (bounds.width * mapFit) / (bounds.height * mapFit), 0.0001f)
+        assertTrue(metroLabelUserSize(3000f, 1f) >= 12f)
+        assertTrue(metroLabelUserSize(400f, 4f) >= 12f)
     }
 
     @Test

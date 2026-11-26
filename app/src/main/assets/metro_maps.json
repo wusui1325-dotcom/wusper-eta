@@ -1,0 +1,14 @@
+{
+  "1100": {
+    "url": "https://www.bjsubway.com/subway/images/subway_map.png?t=20260215",
+    "source": "北京地铁官方网站线路图 https://www.bjsubway.com/jpg.html"
+  },
+  "3100": {
+    "url": "https://service.shmetro.com/skin/map/shmetro-map.jpg",
+    "source": "上海地铁官方网络示意图 https://service.shmetro.com/skin/map/shmetro-map.jpg"
+  },
+  "8100": {
+    "asset": "mtr_system_map.png",
+    "source": "港鐵官方路線圖 https://www.mtr.com.hk/ch/customer/images/jp/system_map.png"
+  }
+}
