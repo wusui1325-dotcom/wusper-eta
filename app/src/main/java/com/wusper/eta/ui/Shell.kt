@@ -91,6 +91,8 @@ fun Root(model: AppModel) {
         ) {
             if (model.detail != null) {
                 RouteDetailPane(model, Modifier.weight(1f))
+            } else if (model.rail != null) {
+                RailPane(model, Modifier.weight(1f))
             } else {
                 TopBar(model)
                 if (model.widgetSizes) WidgetSizeRow { model.widgetSizes = false }
@@ -110,10 +112,11 @@ fun Root(model: AppModel) {
         val help = model.help
         if (help != null) HelpSheet(help) { model.help = null }
     }
-    BackHandler(enabled = model.help != null || model.detail != null || model.widgetSizes || model.widgetPage || model.showSettings || model.showMap) {
+    BackHandler(enabled = model.help != null || model.detail != null || model.rail != null || model.widgetSizes || model.widgetPage || model.showSettings || model.showMap) {
         when {
             model.help != null -> model.help = null
             model.detail != null -> model.closeDetail()
+            model.rail != null -> model.closeRail()
             model.widgetSizes -> model.widgetSizes = false
             model.widgetPage -> model.widgetPage = false
             model.showSettings -> model.closeSettings()

@@ -3,7 +3,7 @@
     <string name="app_name">Wusper ETA</string>
     <string name="tab_saved">Saved</string>
     <string name="tab_bus">Bus</string>
-    <string name="tab_mtr">MTR</string>
+    <string name="tab_mtr">Rail</string>
     <string name="tab_search">Search</string>
     <string name="tab_nav">Navigate</string>
     <string name="tab_nearby">Nearby</string>
@@ -27,6 +27,18 @@
     <string name="down">Down</string>
     <string name="none">None</string>
     <string name="fare_line">Fare %1$s</string>
+    <string name="fare_total">Est. fare %1$s</string>
+    <string name="rail_pair">MTR / Light Rail</string>
+    <string name="rail_mtr">MTR</string>
+    <string name="rail_lrt">Light Rail</string>
+    <string name="rail_nation">National metro</string>
+    <string name="rail_exit">Exits</string>
+    <string name="metro_browse">Browse</string>
+    <string name="metro_plan">Transfer</string>
+    <string name="metro_towards">to %1$s</string>
+    <string name="metro_next">Next %1$s</string>
+    <string name="metro_xfer">Transfers %1$d</string>
+    <string name="metro_stops">%1$d stops</string>
     <string name="plan_none">No route</string>
     <string name="minutes_n">%1$d min</string>
     <string name="fail">Offline</string>

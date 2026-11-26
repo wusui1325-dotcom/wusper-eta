@@ -52,6 +52,7 @@ import com.wusper.eta.data.Route
 import com.wusper.eta.data.SavedStop
 import com.wusper.eta.data.Stop
 import com.wusper.eta.data.TripPlan
+import com.wusper.eta.data.boardingFare
 import com.wusper.eta.data.accepts
 import com.wusper.eta.data.formatMeters
 import com.wusper.eta.data.toSaved
@@ -353,6 +354,11 @@ private fun RideResult(plan: TripPlan, modifier: Modifier) {
             stringResource(R.string.nav_range, plan.minutes, plan.minutesMax)
         }
         BasicText(range, style = Ink.display)
+        val fare = boardingFare(plan.fare)
+        if (fare != null) {
+            Spacer(Modifier.height(8.dp))
+            BasicText(stringResource(R.string.fare_total, fare), style = Ink.title)
+        }
         Spacer(Modifier.height(12.dp))
         plan.rides.forEach { ride ->
             RideRow(ride)

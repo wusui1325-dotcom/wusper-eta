@@ -79,6 +79,10 @@ class AppModel(initial: Snapshot) {
     val etaState = mutableStateMapOf<String, EtaState>()
     val etaSlots = mutableStateMapOf<String, List<EtaSlot>>()
     var detailReady by mutableStateOf(false)
+    var rail by mutableStateOf<RailFocus?>(null)
+        private set
+    var atlas by mutableStateOf<RailAtlas?>(null)
+        private set
     var etaOrder by mutableStateOf(0)
     var mtrOrder by mutableStateOf(0)
     var favOrder by mutableStateOf(0)
@@ -167,6 +171,97 @@ class AppModel(initial: Snapshot) {
 
     fun closeMap() {
         showMap = false
+    }
+
+    fun openLocalMap() {
+        showMap = false
+        showSettings = false
+        widgetSizes = false
+        widgetPage = false
+        detail = null
+        rail = RailFocus.Map(false)
+        ensureAtlas()
+    }
+
+    fun showRailMap(light: Boolean) {
+        rail = RailFocus.Map(light)
+        ensureAtlas()
+    }
+
+    fun openNation() {
+        showMap = false
+        showSettings = false
+        widgetSizes = false
+        widgetPage = false
+        detail = null
+        rail = RailFocus.Nation
+    }
+
+    fun openMetro(id: String, key: String, name: String) {
+        if (id.isBlank() || key.isBlank()) return
+        rail = RailFocus.Metro(id, key, name)
+    }
+
+    fun openRailStation(kind: String, id: String) {
+        val lightMap = (rail as? RailFocus.Map)?.light == true
+        rail = RailFocus.Station(kind, id, lightMap)
+        ensureAtlas()
+    }
+
+    fun closeRail() {
+        rail = when (val page = rail) {
+            is RailFocus.Station -> RailFocus.Map(page.lightMap)
+            is RailFocus.Metro -> RailFocus.Nation
+            else -> null
+        }
+    }
+
+    fun openHeavyLine(code: String, name: String) {
+        openDetail(RouteFocus.Mtr(code, name, "up"))
+    }
+
+    fun openLightRoute(route: String, dir: String, dest: String, stopId: String) {
+        openDetail(
+            RouteFocus.Bus(
+                Route(
+                    co = "LRT",
+                    route = route,
+                    dir = dir.ifBlank { "1" },
+                    serviceType = "1",
+                    dest = dest,
+                    stopId = stopId,
+                    routeId = "",
+                    region = "",
+                    state = EtaState.Loading,
+                    etas = emptyList(),
+                ),
+            ),
+        )
+    }
+
+    fun heavyStations(): List<MtrIndex.Station> = index?.stations.orEmpty()
+
+    fun heavyStation(id: String): MtrIndex.Station? = index?.station(id)
+
+    fun lightStops(): List<LightRailIndex.Stop> = light?.stops.orEmpty()
+
+    fun lightStop(id: String): LightRailIndex.Stop? = light?.byId(id)
+
+    fun exitsOf(id: String): List<RailExit> = if (id.isBlank()) emptyList() else atlas?.exits?.get(id).orEmpty()
+
+    private fun ensureAtlas() {
+        if (atlas != null) return
+        val ctx = app ?: return
+        scope.launch(Dispatchers.IO) {
+            val loaded = try {
+                RailAtlas.load(ctx)
+            } catch (_: Exception) {
+                return@launch
+            }
+            withContext(Dispatchers.Main) {
+                if (atlas == null) atlas = loaded
+            }
+        }
     }
 
     fun flipBus(origin: Route) {
@@ -839,8 +934,8 @@ class AppModel(initial: Snapshot) {
                 null
             }
             val usable = result != null && !result.mock && (result.rides.isNotEmpty() || result.walkMinutes > 0)
-            if (usable) {
-                plan = result
+            if (usable && result != null) {
+                plan = priced(result)
                 planFailed = false
                 planUnavailable = false
                 persist()
@@ -849,6 +944,21 @@ class AppModel(initial: Snapshot) {
                 planUnavailable = true
             }
         }
+    }
+
+    private suspend fun priced(plan: TripPlan): TripPlan {
+        val ctx = app ?: return plan
+        var spins = 0
+        while ((index == null || light == null) && spins < 40) {
+            delay(25)
+            spins++
+        }
+        val book = atlas ?: withContext(Dispatchers.IO) { RailAtlas.load(ctx) }.also { loaded ->
+            if (atlas == null) atlas = loaded
+        }
+        val heavyStops = index?.stations?.map { NamedStop(it.sta, it.name, it.nameEn) }.orEmpty()
+        val lightStops = light?.stops?.map { NamedStop(it.id, it.name, it.nameEn) }.orEmpty()
+        return plan.copy(fare = tripFare(plan.rides.map { book.ridePrice(it, heavyStops, lightStops) }))
     }
 
     fun locateGranted() {

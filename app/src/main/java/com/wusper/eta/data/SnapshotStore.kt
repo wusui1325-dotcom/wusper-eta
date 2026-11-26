@@ -263,6 +263,7 @@ private fun JSONObject.plan(): TripPlan {
             for (i in 0 until arr.length()) {
                 val r = arr.optJSONObject(i) ?: continue
                 val min = r.optInt("min", 0)
+                val quoted = if (r.has("fare") && !r.isNull("fare")) r.optDouble("fare", Double.NaN) else Double.NaN
                 add(
                     RideLeg(
                         kind = r.s("kind"),
@@ -271,12 +272,14 @@ private fun JSONObject.plan(): TripPlan {
                         alight = r.s("alight"),
                         minutes = min,
                         minutesMax = r.optInt("max", min),
+                        fare = quoted.takeIf { !it.isNaN() && it > 0.0 },
                     ),
                 )
             }
         }
     }
     val minutes = optInt("min", 0)
+    val quoted = if (has("fare") && !isNull("fare")) optDouble("fare", Double.NaN) else Double.NaN
     return TripPlan(
         optBoolean("mock", false),
         minutes,
@@ -286,6 +289,7 @@ private fun JSONObject.plan(): TripPlan {
         optInt("max", minutes),
         rides,
         optInt("walk", 0),
+        quoted.takeIf { !it.isNaN() && it > 0.0 },
     )
 }
 
@@ -364,6 +368,7 @@ private fun TripPlan.json(): JSONObject = JSONObject().apply {
     put("min", minutes)
     put("max", minutesMax)
     put("walk", walkMinutes)
+    fare?.let { put("fare", it) }
     put("m", meters)
     put("poly", poly)
     put(
@@ -391,7 +396,8 @@ private fun TripPlan.json(): JSONObject = JSONObject().apply {
                         .put("board", ride.board)
                         .put("alight", ride.alight)
                         .put("min", ride.minutes)
-                        .put("max", ride.minutesMax),
+                        .put("max", ride.minutesMax)
+                        .apply { ride.fare?.let { put("fare", it) } },
                 )
             }
         },

@@ -9,6 +9,8 @@ class MtrIndex(val stations: List<Station>) {
 
     fun name(sta: String): String = bySta[sta]?.name ?: sta
 
+    fun station(sta: String): Station? = bySta[sta]
+
     fun onLine(code: String): List<Station> {
         val have = stations.filter { code in it.lines }
         val rank = mtrLineOrder(code).withIndex().associate { it.value to it.index }
@@ -43,6 +45,7 @@ class MtrIndex(val stations: List<Station>) {
         val lineNames: List<String>,
         val lat: Double,
         val lng: Double,
+        val nameEn: String = "",
     )
 
     companion object {
@@ -62,6 +65,7 @@ class MtrIndex(val stations: List<Station>) {
                             lineNames = o.optJSONArray("line_names_tc").toStrings(),
                             lat = o.optDouble("lat", 0.0),
                             lng = o.optDouble("lng", 0.0),
+                            nameEn = o.optString("name_en"),
                         ),
                     )
                 }

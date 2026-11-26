@@ -3,7 +3,7 @@
     <string name="app_name">Wusper ETA</string>
     <string name="tab_saved">收藏</string>
     <string name="tab_bus">巴士</string>
-    <string name="tab_mtr">港铁</string>
+    <string name="tab_mtr">铁路</string>
     <string name="tab_search">搜索</string>
     <string name="tab_nav">导航</string>
     <string name="tab_nearby">附近</string>
@@ -27,6 +27,18 @@
     <string name="down">下行</string>
     <string name="none">暂无</string>
     <string name="fare_line">车资 %1$s</string>
+    <string name="fare_total">预计总车资 %1$s</string>
+    <string name="rail_pair">港铁/轻铁</string>
+    <string name="rail_mtr">港铁</string>
+    <string name="rail_lrt">轻铁</string>
+    <string name="rail_nation">全国地铁</string>
+    <string name="rail_exit">出口</string>
+    <string name="metro_browse">浏览</string>
+    <string name="metro_plan">换乘</string>
+    <string name="metro_towards">往 %1$s</string>
+    <string name="metro_next">下一站 %1$s</string>
+    <string name="metro_xfer">换乘 %1$d</string>
+    <string name="metro_stops">%1$d 站</string>
     <string name="plan_none">未能规划</string>
     <string name="minutes_n">%1$d 分钟</string>
     <string name="fail">连线失败</string>

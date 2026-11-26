@@ -128,19 +128,30 @@ fun MtrHome(model: AppModel) {
         busArrivals(model.lrt, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta, model.statePlain, model.etaPlain)
     }
     val rows = remember(heavy, lightRows) { (heavy + lightRows).byLiveEtaThenDistance() }
-    ArrivalColumn {
-        item {
-            Column(Modifier.padding(top = 12.dp, bottom = 8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    BasicText(stringResource(R.string.tab_mtr), style = Ink.meta)
-                    Spacer(Modifier.width(6.dp))
-                    HelpMark { model.help = Help.MtrGeo }
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Row(
+                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(start = 20.dp, end = 28.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                InkButton(Glyphs.map, stringResource(R.string.rail_pair), label = stringResource(R.string.rail_pair)) {
+                    model.openLocalMap()
                 }
+                Spacer(Modifier.width(4.dp))
+                InkButton(Glyphs.all, stringResource(R.string.rail_nation), label = stringResource(R.string.rail_nation)) {
+                    model.openNation()
+                }
+                Spacer(Modifier.width(6.dp))
+                HelpMark { model.help = Help.MtrGeo }
             }
         }
-        items(rows, key = { it.key }, contentType = { "arrival" }) { row ->
-            ArrivalLine(row.shown(model), { model.help = it }, { flipOf(model, it) }) {
-                row.focus?.let { model.openDetail(it) }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            ArrivalColumn {
+                items(rows, key = { it.key }, contentType = { "arrival" }) { row ->
+                    ArrivalLine(row.shown(model), { model.help = it }, { flipOf(model, it) }) {
+                        row.focus?.let { model.openDetail(it) }
+                    }
+                }
             }
         }
     }

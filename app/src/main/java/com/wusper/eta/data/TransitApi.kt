@@ -501,6 +501,7 @@ class TransitApi {
                         alight = alight,
                         minutes = legSpan.first,
                         minutesMax = legSpan.second,
+                        fare = quotedFare(step),
                     ),
                 )
             } else {
@@ -550,6 +551,27 @@ class TransitApi {
             else -> raw?.toString().orEmpty()
         }
         return parseStopSeq(text, fallback)
+    }
+
+    private fun quotedFare(step: JSONObject): Double? {
+        for (key in listOf("price", "fare", "adult_fare")) {
+            if (!step.has(key) || step.isNull(key)) continue
+            val value = when (val raw = step.opt(key)) {
+                is Number -> raw.toDouble()
+                is String -> raw.trim().toDoubleOrNull()
+                is JSONObject -> {
+                    val nested = if (raw.has("price")) raw.opt("price") else raw.opt("amount")
+                    when (nested) {
+                        is Number -> nested.toDouble()
+                        is String -> nested.trim().toDoubleOrNull()
+                        else -> null
+                    }
+                }
+                else -> null
+            }
+            if (value != null && !value.isNaN() && value > 0.0) return value
+        }
+        return null
     }
 
     private fun readPrice(row: JSONObject): Double? {

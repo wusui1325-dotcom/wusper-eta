@@ -17,6 +17,19 @@ import com.wusper.eta.data.lrtMinutes
 import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.boardingFare
+import com.wusper.eta.data.fareBetween
+import com.wusper.eta.data.railStopKey
+import com.wusper.eta.data.rideFareKind
+import com.wusper.eta.data.RideFareKind
+import com.wusper.eta.data.tripFare
+import com.wusper.eta.data.MetroLine
+import com.wusper.eta.data.MetroNames
+import com.wusper.eta.data.MetroNetwork
+import com.wusper.eta.data.MetroStation
+import com.wusper.eta.data.metroCacheFresh
+import com.wusper.eta.data.metroSvg
+import com.wusper.eta.data.planMetro
+import com.wusper.eta.data.METRO_CACHE_MS
 import com.wusper.eta.data.mtrLineOrder
 import com.wusper.eta.data.Stop
 import com.wusper.eta.data.FavRoute
@@ -153,6 +166,37 @@ class LogicTest {
         assertTrue(haversineMeters(22.2819, 114.1580, hit!!.lat, hit.lng) < haversineMeters(22.2819, 114.1580, far.lat, far.lng))
         val first = nearestStop(listOf(near, far), 0.0, 0.0)
         assertEquals("far", first?.id)
+    }
+
+    @Test
+    fun metroPlanCountsOneTransfer() {
+        val names = MetroNames("甲", "甲", "A")
+        fun stop(name: String, x: Double) = MetroStation(name, names.copy(zh = name, hant = name, en = name), false, x, 0.0)
+        val a = MetroLine("a", "1号线", MetroNames("1号线", "1號綫", "Line 1"), listOf(stop("S1", 0.0), stop("S2", 1.0), stop("S3", 2.0)), emptyList())
+        val b = MetroLine("b", "2号线", MetroNames("2号线", "2號綫", "Line 2"), listOf(stop("S3", 2.0), stop("S4", 3.0)), emptyList())
+        val ride = planMetro(MetroNetwork("1", "t", "測試", listOf(a, b)), "S1", "S4")
+        assertEquals(1, ride?.transfers)
+        assertEquals(listOf("a", "b"), ride?.segments?.map { it.lineId })
+        assertNull(planMetro(MetroNetwork("1", "t", "測試", listOf(a)), "S1", "S9"))
+        assertTrue(metroSvg(MetroNetwork("1", "t", "測試", listOf(a)), "zh-TW").contains("<svg"))
+        assertTrue(metroCacheFresh(1_000L, 1_000L + METRO_CACHE_MS - 1))
+        assertTrue(!metroCacheFresh(1_000L, 1_000L + METRO_CACHE_MS))
+    }
+
+    @Test
+    fun tripFareNeedsEveryPaidLeg() {
+        assertEquals(10.0, tripFare(listOf(4.9, 5.1))!!, 0.001)
+        assertNull(tripFare(listOf(4.9, null)))
+        assertNull(tripFare(emptyList()))
+        assertNull(tripFare(listOf(0.0)))
+        assertEquals("金鐘", railStopKey("金鐘站"))
+        assertEquals("Admiralty", railStopKey("Admiralty Station"))
+        assertEquals(4.9, fareBetween(mapOf("CEN|ADM" to 4.9), "CEN", "ADM")!!, 0.001)
+        assertNull(fareBetween(mapOf("CEN|ADM" to 4.9), "CEN", "CEN"))
+        assertEquals(RideFareKind.Light, rideFareKind("rail", "610"))
+        assertEquals(RideFareKind.Heavy, rideFareKind("rail", "港島綫"))
+        assertEquals(RideFareKind.Airport, rideFareKind("rail", "機場快線"))
+        assertEquals(RideFareKind.Bus, rideFareKind("bus", "71K"))
     }
 
     @Test

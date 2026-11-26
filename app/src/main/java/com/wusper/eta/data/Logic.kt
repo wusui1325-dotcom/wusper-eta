@@ -355,6 +355,41 @@ fun planCopy(lines: List<String>, transit: Boolean, route: String, towards: Stri
     return spoken.first() to (spoken.drop(1) + extra).joinToString("\n")
 }
 
+fun railStopKey(name: String): String {
+    var text = name.trim()
+    if (text.endsWith(" Station", ignoreCase = true)) text = text.dropLast(" Station".length).trim()
+    if (text.endsWith("站") && text.length > 1) text = text.dropLast(1)
+    return text.replace(" ", "")
+}
+
+fun fareBetween(table: Map<String, Double>, from: String, to: String): Double? {
+    if (from.isBlank() || to.isBlank() || from == to) return null
+    val price = table["$from|$to"] ?: return null
+    if (price.isNaN() || price <= 0.0) return null
+    return price
+}
+
+enum class RideFareKind { Bus, Heavy, Airport, Light }
+
+fun rideFareKind(kind: String, name: String): RideFareKind {
+    if (kind != "rail") return RideFareKind.Bus
+    val text = name.replace("綫", "線").replace("线", "線")
+    if (text.contains("輕鐵") || text.contains("Light Rail", ignoreCase = true)) return RideFareKind.Light
+    if (Regex("""^\d{3}[A-Za-z]?$""").matches(text.trim())) return RideFareKind.Light
+    if (text.contains("機場快") || text.contains("Airport Express", ignoreCase = true)) return RideFareKind.Airport
+    return RideFareKind.Heavy
+}
+
+fun tripFare(prices: List<Double?>): Double? {
+    if (prices.isEmpty()) return null
+    var sum = 0.0
+    for (price in prices) {
+        if (price == null || price.isNaN() || price <= 0.0) return null
+        sum += price
+    }
+    return sum
+}
+
 fun boardingFare(price: Double?): String? {
     if (price == null || price.isNaN() || price <= 0.0) return null
     val cents = kotlin.math.round(price * 100.0).toInt()

@@ -77,6 +77,9 @@ keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -sto
 | 港鐵到站 | `https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php` |
 | 輕鐵路線與車站 | 內置 `lrt_stops.json`（官方路線站表；座標來自地政總署地圖） |
 | 輕鐵到站 | `https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule` |
+| 港鐵、機場快線、輕鐵成人八達通車費 | `https://opendata.mtr.com.hk/data/mtr_lines_fares.csv`、`airport_express_fares.csv`、`light_rail_fares.csv` |
+| 金鐘出口與地標 | 港鐵出口牌（官方 signage）。其他站未有完整官方出口名錄時不顯示 |
+| 全國地鐵 | `https://wusper.com/api/metro/cities` 與 `https://wusper.com/api/metro/network`。裝置只向 wusper.com 取地鐵圖 |
 
 到站時間只來自官方回應。官方沒有給時間就顯示「暫無」，不會估算。
 

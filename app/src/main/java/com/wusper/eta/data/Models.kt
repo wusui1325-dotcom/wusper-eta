@@ -133,6 +133,7 @@ data class RideLeg(
     val alight: String,
     val minutes: Int,
     val minutesMax: Int = minutes,
+    val fare: Double? = null,
 )
 
 data class TripPlan(
@@ -144,7 +145,15 @@ data class TripPlan(
     val minutesMax: Int = minutes,
     val rides: List<RideLeg> = emptyList(),
     val walkMinutes: Int = 0,
+    val fare: Double? = null,
 )
+
+sealed class RailFocus {
+    data class Map(val light: Boolean = false) : RailFocus()
+    data object Nation : RailFocus()
+    data class Metro(val id: String, val key: String, val name: String) : RailFocus()
+    data class Station(val kind: String, val id: String, val lightMap: Boolean) : RailFocus()
+}
 
 sealed class RouteFocus {
     abstract val favId: String
