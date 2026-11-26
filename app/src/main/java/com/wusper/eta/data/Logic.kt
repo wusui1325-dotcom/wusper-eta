@@ -355,6 +355,20 @@ fun planCopy(lines: List<String>, transit: Boolean, route: String, towards: Stri
     return spoken.first() to (spoken.drop(1) + extra).joinToString("\n")
 }
 
+fun boardingFare(price: Double?): String? {
+    if (price == null || price.isNaN() || price <= 0.0) return null
+    val cents = kotlin.math.round(price * 100.0).toInt()
+    if (cents <= 0) return null
+    val whole = cents / 100
+    val frac = cents % 100
+    val body = when {
+        frac == 0 -> whole.toString()
+        frac % 10 == 0 -> "$whole.${frac / 10}"
+        else -> "$whole.${frac.toString().padStart(2, '0')}"
+    }
+    return "$$body"
+}
+
 fun nearestStop(stops: List<DetailStop>, lat: Double, lng: Double): DetailStop? {
     val placed = stops.filter { it.lat != 0.0 && it.lng != 0.0 }
     if (placed.isEmpty()) return null

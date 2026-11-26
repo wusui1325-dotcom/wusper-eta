@@ -26,6 +26,7 @@
     <string name="up">上行</string>
     <string name="down">下行</string>
     <string name="none">暂无</string>
+    <string name="fare_line">车资 %1$s</string>
     <string name="plan_none">未能规划</string>
     <string name="minutes_n">%1$d 分钟</string>
     <string name="fail">连线失败</string>

@@ -121,9 +121,13 @@ fun BusHome(model: AppModel) {
 
 @Composable
 fun MtrHome(model: AppModel) {
-    val rows = remember(model.mtr, model.lat, model.lng, model.mtrOrder) {
+    val heavy = remember(model.mtr, model.lat, model.lng, model.mtrOrder) {
         mtrArrivals(model.mtr, model.lat, model.lng, model.sidePlain)
     }
+    val lightRows = remember(model.lrt, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta, model.etaOrder) {
+        busArrivals(model.lrt, model.lat, model.lng, model.shownBound, model.boundState, model.boundEta, model.statePlain, model.etaPlain)
+    }
+    val rows = remember(heavy, lightRows) { (heavy + lightRows).byLiveEtaThenDistance() }
     ArrivalColumn {
         item {
             Column(Modifier.padding(top = 12.dp, bottom = 8.dp)) {

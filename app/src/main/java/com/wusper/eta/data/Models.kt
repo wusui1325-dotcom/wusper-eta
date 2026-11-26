@@ -173,6 +173,7 @@ data class AlongStop(
     val lat: Double,
     val lng: Double,
     val seq: Int,
+    val price: Double? = null,
 )
 
 data class SearchBundle(

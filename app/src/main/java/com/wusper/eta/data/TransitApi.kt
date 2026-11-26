@@ -177,10 +177,63 @@ class TransitApi {
                         lat = s.dbl("lat"),
                         lng = s.dbl("lng"),
                         seq = readSeq(s, i + 1),
+                        price = readPrice(s),
                     ),
                 )
             }
         }.inStopOrder { it.seq }
+    }
+
+    suspend fun fares(route: Route): Map<Int, Double> = withContext(Dispatchers.IO) {
+        val url = buildString {
+            append("$WUSPER/fares?co=${enc(route.co)}&route=${enc(route.route)}")
+            append("&dir=${enc(route.dir)}&service_type=${enc(route.serviceType)}")
+            if (route.routeId.isNotBlank()) append("&route_id=${enc(route.routeId)}")
+        }
+        try {
+            val root = JSONObject(get(url))
+            if (!root.optBoolean("ok")) return@withContext emptyMap()
+            val arr = root.optJSONArray("fares") ?: return@withContext emptyMap()
+            buildMap {
+                for (i in 0 until arr.length()) {
+                    val row = arr.optJSONObject(i) ?: continue
+                    val seq = readSeq(row, 0)
+                    val price = readPrice(row) ?: continue
+                    if (seq > 0) put(seq, price)
+                }
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    data class LrtCall(val route: String, val dest: String, val minutes: Int?)
+
+    suspend fun lrt(stationId: String): List<LrtCall>? = withContext(Dispatchers.IO) {
+        try {
+            val root = JSONObject(get("https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule?station_id=${enc(stationId)}&with_special=1"))
+            if (root.optInt("status", 0) != 1) return@withContext null
+            if (root.optInt("end_service_status", 0) == 1) return@withContext emptyList()
+            val platforms = root.optJSONArray("platform_list") ?: return@withContext emptyList()
+            buildList {
+                for (p in 0 until platforms.length()) {
+                    val platform = platforms.optJSONObject(p) ?: continue
+                    val routes = platform.optJSONArray("route_list") ?: continue
+                    for (i in 0 until routes.length()) {
+                        val row = routes.optJSONObject(i) ?: continue
+                        if (row.optInt("stop", 0) == 1) continue
+                        if (row.optInt("end_service_status", 0) == 1) continue
+                        val code = row.optString("route_no")
+                        if (code.isBlank()) continue
+                        val dest = row.optString("dest_ch").ifBlank { row.optString("dest_en") }
+                        val minutes = lrtMinutes(row.optString("time_ch")) ?: lrtMinutes(row.optString("time_en"))
+                        add(LrtCall(code, dest, minutes))
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     suspend fun live(route: Route): List<EtaSlot> = withContext(Dispatchers.IO) {
@@ -497,6 +550,17 @@ class TransitApi {
             else -> raw?.toString().orEmpty()
         }
         return parseStopSeq(text, fallback)
+    }
+
+    private fun readPrice(row: JSONObject): Double? {
+        if (!row.has("price") || row.isNull("price")) return null
+        val amount = when (val raw = row.opt("price")) {
+            is Number -> raw.toDouble()
+            is String -> raw.trim().toDoubleOrNull()
+            else -> null
+        } ?: return null
+        if (amount.isNaN() || amount <= 0.0) return null
+        return amount
     }
 
     private fun endpoint(place: Place): JSONObject {

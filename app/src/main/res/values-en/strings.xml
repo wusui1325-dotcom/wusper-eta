@@ -26,6 +26,7 @@
     <string name="up">Up</string>
     <string name="down">Down</string>
     <string name="none">None</string>
+    <string name="fare_line">Fare %1$s</string>
     <string name="plan_none">No route</string>
     <string name="minutes_n">%1$d min</string>
     <string name="fail">Offline</string>

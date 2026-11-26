@@ -15,6 +15,8 @@ import android.widget.RemoteViews
 import com.wusper.eta.MainActivity
 import com.wusper.eta.R
 import com.wusper.eta.data.DetailStop
+import com.wusper.eta.data.LightRailIndex
+import com.wusper.eta.data.lrtDestMatch
 import com.wusper.eta.data.FavRoute
 import com.wusper.eta.data.MtrIndex
 import com.wusper.eta.data.RouteUsage
@@ -176,6 +178,27 @@ object EtaWidgets {
         val none = UiPrefs.wrap(context).getString(R.string.none)
         val title = route.title.ifBlank { route.route.ifBlank { route.line } }
         val kept = if (previousSettled) previousMinutes else ""
+        if (route.co == "LRT") {
+            val index = LightRailIndex.load(context)
+            val onRoute = index.stops.filter { stop -> stop.routes.any { it.route == route.route } }
+            val stop = when {
+                route.stopId.isNotBlank() -> index.byId(route.stopId) ?: onRoute.firstOrNull { it.id == route.stopId }
+                else -> {
+                    val placed = onRoute.filter { it.lat != 0.0 && it.lng != 0.0 }
+                    val nearest = nearestStop(
+                        placed.map { DetailStop(it.id, it.name, it.lat, it.lng, 1) },
+                        lat,
+                        lng,
+                    )
+                    placed.firstOrNull { it.id == nearest?.id }
+                }
+            } ?: return SlotFace(route.id, title, route.dest, stopName.ifBlank { previousStop }, "", false)
+            val calls = api.lrt(stop.id) ?: return SlotFace(route.id, title, route.dest, stop.name, kept, false)
+            val directed = calls.filter { it.route == route.route && (route.dest.isBlank() || lrtDestMatch(it.dest, route.dest)) }
+            val times = (directed.ifEmpty { calls.filter { it.route == route.route } }).mapNotNull { it.minutes }
+            val label = if (times.isEmpty()) none else "${times.first()}′"
+            return SlotFace(route.id, title, route.dest, stop.name, label, true)
+        }
         return if (route.line.isNotBlank()) {
             val index = MtrIndex.load(context)
             val stations = index.onLine(route.line).mapIndexed { i, station ->

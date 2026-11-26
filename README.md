@@ -7,8 +7,8 @@
 
 ## 做什麼
 
-- 附近路線：九巴、城巴、專線小巴（`https://wusper.com/api/eta/nearby-routes`）
-- 官方到站：九巴、城巴、專線小巴、港鐵
+- 附近路線：九巴、城巴、專線小巴（`https://wusper.com/api/eta/nearby-routes`）。港鐵分頁同時列出重鐵與輕鐵
+- 官方到站：九巴、城巴、專線小巴、港鐵、輕鐵
 - 站與路線搜尋
 - 地圖：Google Maps SDK，使用預設彩色底圖。金鑰只放在本機 `local.properties`
 - 行程：`POST https://wusper.com/api/eta/compute-routes`。沒有路徑時顯示「未能規劃」
@@ -75,6 +75,8 @@ keytool -list -v -alias androiddebugkey -keystore ~/.android/debug.keystore -sto
 | 城巴到站 | `https://rt.data.gov.hk/v2/transport/citybus/` |
 | 專線小巴到站 | `https://data.etagmb.gov.hk/` |
 | 港鐵到站 | `https://rt.data.gov.hk/v1/transport/mtr/getSchedule.php` |
+| 輕鐵路線與車站 | 內置 `lrt_stops.json`（官方路線站表；座標來自地政總署地圖） |
+| 輕鐵到站 | `https://rt.data.gov.hk/v1/transport/mtr/lrt/getSchedule` |
 
 到站時間只來自官方回應。官方沒有給時間就顯示「暫無」，不會估算。
 

@@ -35,6 +35,7 @@ class AppModel(initial: Snapshot) {
     var openKey by mutableStateOf(initial.openKey)
     var stops by mutableStateOf(initial.stops)
     var mtr by mutableStateOf(initial.mtr)
+    var lrt by mutableStateOf<List<Stop>>(emptyList())
     var fav by mutableStateOf(initial.fav)
     var recent by mutableStateOf(initial.recent)
     var help by mutableStateOf<Help?>(null)
@@ -71,6 +72,7 @@ class AppModel(initial: Snapshot) {
     val detailNext = mutableStateMapOf<String, EtaSlot?>()
     val detailTimes = mutableStateMapOf<String, List<EtaSlot>>()
     val detailTransfers = mutableStateMapOf<String, List<String>>()
+    val detailFares = mutableStateMapOf<String, Double>()
     var routeFav by mutableStateOf<Set<String>>(emptySet())
     var savedRoutes by mutableStateOf<List<FavRoute>>(emptyList())
     val favEta = mutableStateMapOf<String, List<EtaSlot>>()
@@ -93,6 +95,8 @@ class AppModel(initial: Snapshot) {
     private val favNone = HashMap<String, Boolean>()
     private var savedAt: Long = initial.at
     private var index: MtrIndex? = null
+    private var light: LightRailIndex? = null
+    private val lrtOpposite = HashMap<String, BoundHit>()
     private var app: Context? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val api by lazy { TransitApi() }
@@ -126,7 +130,9 @@ class AppModel(initial: Snapshot) {
             val ctx = app ?: return@launch
             launch { refreshVisibleEtas() }
             index = withContext(Dispatchers.IO) { com.wusper.eta.Boot.awaitIndex() ?: MtrIndex.load(ctx) }
+            light = withContext(Dispatchers.IO) { LightRailIndex.load(ctx) }
             launch { refreshMtr() }
+            launch { refreshLrt() }
             launch { refreshFavEtas() }
             launch { enrichCoords() }
             pullLocation()
@@ -165,6 +171,17 @@ class AppModel(initial: Snapshot) {
 
     fun flipBus(origin: Route) {
         val id = origin.key
+        if (origin.co == "LRT") {
+            val generation = (flipGen[id] ?: 0) + 1
+            flipGen[id] = generation
+            if (shownBound.containsKey(id)) {
+                shownBound = shownBound - id
+                return
+            }
+            val other = lrtOpposite[id] ?: return
+            adoptBound(id, other, generation)
+            return
+        }
         val generation = (flipGen[id] ?: 0) + 1
         flipGen[id] = generation
         if (shownBound.containsKey(id)) {
@@ -206,7 +223,7 @@ class AppModel(initial: Snapshot) {
         boundState = boundState + (id to EtaState.Loading)
         scope.launch(Dispatchers.IO) {
             val slots = try {
-                api.live(hit.asRoute())
+                if (hit.co == "LRT") lrtEta(hit.stopId, hit.route, hit.dest) else api.live(hit.asRoute())
             } catch (_: Exception) {
                 null
             }
@@ -251,6 +268,7 @@ class AppModel(initial: Snapshot) {
         detailNext.clear()
         detailTimes.clear()
         detailTransfers.clear()
+        detailFares.clear()
         transferPending.clear()
         detailReady = false
         showSettings = false
@@ -273,6 +291,7 @@ class AppModel(initial: Snapshot) {
         val marker = intent?.getStringExtra(com.wusper.eta.widget.EtaWidgets.EXTRA) ?: return
         if (marker.isBlank()) return
         val line = intent.getStringExtra("line").orEmpty()
+        val company = intent.getStringExtra("co").orEmpty()
         val focus = if (line.isNotBlank()) {
             RouteFocus.Mtr(
                 line,
@@ -284,7 +303,7 @@ class AppModel(initial: Snapshot) {
             if (code.isBlank()) return
             RouteFocus.Bus(
                 Route(
-                    co = intent.getStringExtra("co").orEmpty(),
+                    co = company,
                     route = code,
                     dir = intent.getStringExtra("dir").orEmpty(),
                     serviceType = intent.getStringExtra("st").orEmpty().ifBlank { "1" },
@@ -297,7 +316,7 @@ class AppModel(initial: Snapshot) {
                 ),
             )
         }
-        tab = if (line.isNotBlank()) Tab.Mtr else Tab.Bus
+        tab = if (line.isNotBlank() || company == "LRT") Tab.Mtr else Tab.Bus
         openDetail(focus)
     }
 
@@ -311,6 +330,20 @@ class AppModel(initial: Snapshot) {
         val focus = detail ?: return
         when (focus) {
             is RouteFocus.Bus -> {
+                if (focus.route.co == "LRT") {
+                    val other = light?.opposite(focus.route.stopId, focus.route.route, focus.route.dir) ?: return
+                    openDetail(
+                        RouteFocus.Bus(
+                            focus.route.copy(
+                                dir = other.dir,
+                                dest = other.destTc,
+                                state = EtaState.Loading,
+                                etas = emptyList(),
+                            ),
+                        ),
+                    )
+                    return
+                }
                 val local = otherBound(bounds, focus.route)
                 if (local != null) {
                     openDetail(RouteFocus.Bus(local.asRoute()))
@@ -338,7 +371,7 @@ class AppModel(initial: Snapshot) {
         scope.launch {
             val names = try {
                 when (focus) {
-                    is RouteFocus.Bus -> busTransfers(focus.route, stop)
+                    is RouteFocus.Bus -> if (focus.route.co == "LRT") lrtTransfers(focus.route, stop) else busTransfers(focus.route, stop)
                     is RouteFocus.Mtr -> mtrTransfers(focus, stop)
                 }
             } catch (_: Exception) {
@@ -346,6 +379,14 @@ class AppModel(initial: Snapshot) {
             }
             if (token == detailToken) detailTransfers[stopId] = names
         }
+    }
+
+    private fun lrtTransfers(route: Route, stop: DetailStop): List<String> {
+        val here = light?.byId(stop.id) ?: return emptyList()
+        return here.routes.map { it.route }
+            .filter { it.isNotBlank() && it != route.route }
+            .distinct()
+            .take(8)
     }
 
     private suspend fun busTransfers(route: Route, stop: DetailStop): List<String> {
@@ -430,6 +471,8 @@ class AppModel(initial: Snapshot) {
                         val pair = api.mtr(row.line, row.stopId, idx::name)
                         val trains = if (row.side == "down") pair.second else pair.first
                         trains.map { EtaSlot(it.minutes, it.scheduled) }
+                    } else if (row.co == "LRT" && row.route.isNotBlank() && row.stopId.isNotBlank()) {
+                        lrtEta(row.stopId, row.route, row.dest)
                     } else if (row.route.isNotBlank() && row.stopId.isNotBlank()) {
                         api.live(row.asRoute())
                     } else {
@@ -454,6 +497,10 @@ class AppModel(initial: Snapshot) {
     }
 
     private suspend fun loadBusDetail(route: Route, token: Int) {
+        if (route.co == "LRT") {
+            loadLrtDetail(route, token)
+            return
+        }
         val stops = try {
             api.routeStops(route)
         } catch (_: Exception) {
@@ -461,7 +508,23 @@ class AppModel(initial: Snapshot) {
         }
         if (token != detailToken) return
         detailStops = stops.map { DetailStop(it.id, it.name, it.lat, it.lng, it.seq) }.inStopOrder { it.seq }
+        stops.forEach { stop -> stop.price?.let { detailFares[stop.id] = it } }
         detailReady = true
+        scope.launch(Dispatchers.IO) {
+            val bySeq = try {
+                api.fares(route)
+            } catch (_: Exception) {
+                emptyMap()
+            }
+            if (token != detailToken || bySeq.isEmpty()) return@launch
+            withContext(Dispatchers.Main) {
+                if (token != detailToken) return@withContext
+                stops.forEach { stop ->
+                    val price = bySeq[stop.seq] ?: return@forEach
+                    detailFares[stop.id] = price
+                }
+            }
+        }
         val gate = Semaphore(6)
         coroutineScope {
         detailStops.forEach { stop ->
@@ -516,8 +579,8 @@ class AppModel(initial: Snapshot) {
     }
 
     private fun publishDetailEta(token: Int, id: String, slots: List<EtaSlot>?) {
-        if (token != detailToken) return
-        val ready = slots ?: listOf(EtaSlot(null, false))
+        if (token != detailToken || slots == null) return
+        val ready = slots
         val timed = ready.filter { it.minutes != null }.take(3)
         detailNext[id] = timed.firstOrNull() ?: ready.firstOrNull()
         detailTimes[id] = if (timed.isEmpty()) listOf(EtaSlot(null, ready.any { it.scheduled })) else timed
@@ -532,6 +595,16 @@ class AppModel(initial: Snapshot) {
     }
 
     fun openStop(stop: Stop) {
+        if (stop.co == "LRT") {
+            tab = Tab.Mtr
+            showMap = false
+            showSettings = false
+            if (lrt.none { it.id == stop.id }) lrt = listOf(stop) + lrt
+            pushRecent(stop.toSaved())
+            persist()
+            scope.launch { refreshLrtStop(stop.id) }
+            return
+        }
         val existing = stops.indexOfFirst { it.key == stop.key }
         stops = if (existing >= 0) {
             stops.map { if (it.key == stop.key) stop.copy(routes = stop.routes.ifEmpty { it.routes }, meters = it.meters) else it }
@@ -608,7 +681,9 @@ class AppModel(initial: Snapshot) {
             val bundle = try {
                 api.search(value)
             } catch (_: Exception) {
-                failed = foundStops.isEmpty() && foundRoutes.isEmpty()
+                if (query != value) return@launch
+                publishSearch(SearchBundle(emptyList(), emptyList(), emptyList()), value)
+                failed = foundStops.isEmpty() && foundRoutes.isEmpty() && foundMtr.isEmpty()
                 return@launch
             }
             if (query != value) return@launch
@@ -631,7 +706,7 @@ class AppModel(initial: Snapshot) {
                 foundStops = emptyList()
                 foundMtr = emptyList()
                 foundRoutes = dedupeRouteHits(
-                    bundle.routes.mapNotNull { route ->
+                    (bundle.routes + (light?.searchRoutes(raw).orEmpty())).mapNotNull { route ->
                         routeSearchRank(raw, route.route, route.dest)?.let { rank -> rank to route }
                     }.sortedWith(compareBy({ it.first }, { it.second.route.length }, { it.second.route }))
                         .map { it.second },
@@ -639,7 +714,8 @@ class AppModel(initial: Snapshot) {
             }
             SearchMode.StopName -> {
                 foundRoutes = emptyList()
-                foundStops = bundle.stops.filter { matchesStopName(raw, it.name, it.nameEn) }
+                foundStops = bundle.stops.filter { matchesStopName(raw, it.name, it.nameEn) } +
+                    (light?.searchStops(raw).orEmpty())
                 foundMtr = bundle.mtr.filter { matchesStopName(raw, it.name, it.nameEn) }
             }
         }
@@ -737,12 +813,12 @@ class AppModel(initial: Snapshot) {
             val hits = try {
                 api.search(text)
             } catch (_: Exception) {
-                return@launch
+                SearchBundle(emptyList(), emptyList(), emptyList())
             }
             val current = if (which == "d") destText else originText
             if (planPick != which || current != text) return@launch
             if ((if (which == "d") dest else origin) != null) return@launch
-            navHits = stationHits(text, hits.stops, hits.mtr) { sta ->
+            navHits = stationHits(text, hits.stops + (light?.searchStops(text).orEmpty()), hits.mtr) { sta ->
                 index?.stations?.firstOrNull { it.sta == sta }?.let { it.lat to it.lng }
             }
         }
@@ -805,8 +881,166 @@ class AppModel(initial: Snapshot) {
         }
     }
 
+    private suspend fun lrtEta(stopId: String, routeNo: String, dest: String): List<EtaSlot>? {
+        val calls = api.lrt(stopId) ?: return null
+        val matched = calls.filter { it.route == routeNo && (dest.isBlank() || lrtDestMatch(it.dest, dest)) }
+        val picked = matched.ifEmpty { calls.filter { it.route == routeNo } }
+        val times = picked.mapNotNull { it.minutes }
+        return if (times.isEmpty()) listOf(EtaSlot(null, false)) else times.take(3).map { EtaSlot(it, false) }
+    }
+
+    private suspend fun refreshLrt() {
+        val idx = light ?: return
+        if (lat == 0.0 || lng == 0.0) return
+        val nearby = idx.near(lat, lng)
+        if (nearby.isEmpty()) {
+            lrt = emptyList()
+            return
+        }
+        val built = nearby.map { (stop, meters) -> lrtStop(stop, meters, null) }
+        lrt = built
+        nearby.forEach { (stop, _) -> refreshLrtStop(stop.id) }
+    }
+
+    private suspend fun refreshLrtStop(stopId: String) {
+        val idx = light ?: return
+        val stop = idx.byId(stopId) ?: return
+        val meters = if (lat != 0.0 && stop.lat != 0.0) haversineMeters(lat, lng, stop.lat, stop.lng).toInt() else 0
+        val calls = try {
+            api.lrt(stopId)
+        } catch (_: Exception) {
+            null
+        }
+        if (calls == null) return
+        val row = lrtStop(stop, meters, calls)
+        lrt = if (lrt.any { it.id == stopId }) lrt.map { if (it.id == stopId) row else it } else listOf(row) + lrt
+    }
+
+    private fun lrtStop(stop: LightRailIndex.Stop, meters: Int, calls: List<TransitApi.LrtCall>?): Stop {
+        val catalogue = stop.routes.groupBy { it.route }
+        val liveRoutes = calls.orEmpty().map { it.route }.distinct()
+        val numbers = (catalogue.keys + liveRoutes).distinct()
+        val routes = numbers.mapNotNull { number ->
+            val visits = catalogue[number].orEmpty()
+            val live = calls?.filter { it.route == number }.orEmpty()
+            val dirs = visits.map { it.dir }.distinct()
+            var preferred = visits.minByOrNull { visit ->
+                val times = live.filter { lrtDestMatch(it.dest, visit.destTc) }.mapNotNull { it.minutes }
+                times.minOrNull() ?: Int.MAX_VALUE
+            } ?: visits.firstOrNull()
+            if (preferred != null && atDestinationTerminus(stop.name, preferred.destTc)) {
+                val away = visits.firstOrNull { it.dir != preferred!!.dir && !atDestinationTerminus(stop.name, it.destTc) }
+                if (away != null) preferred = away
+            }
+            val dest = preferred?.destTc ?: live.firstOrNull()?.dest.orEmpty()
+            val dir = preferred?.dir ?: "S"
+            val route = Route(
+                co = "LRT",
+                route = number,
+                dir = dir,
+                serviceType = "1",
+                dest = dest,
+                stopId = stop.id,
+                routeId = "",
+                region = "",
+                state = if (calls == null) EtaState.Loading else EtaState.Ready,
+                etas = if (calls == null) {
+                    emptyList()
+                } else {
+                    val directed = live.filter { dest.isBlank() || lrtDestMatch(it.dest, dest) }
+                    val times = (directed.ifEmpty { live }).mapNotNull { it.minutes }
+                    if (times.isEmpty()) listOf(EtaSlot(null, false)) else times.take(3).map { EtaSlot(it, false) }
+                },
+            )
+            val other = visits.firstOrNull { it.dir != dir }
+            if (other != null) {
+                lrtOpposite[route.key] = BoundHit(
+                    co = "LRT",
+                    route = number,
+                    dir = other.dir,
+                    serviceType = "1",
+                    dest = other.destTc,
+                    stopId = stop.id,
+                    stopName = stop.name,
+                    routeId = "",
+                    region = "",
+                    meters = meters,
+                    lat = stop.lat,
+                    lng = stop.lng,
+                )
+            } else if (dirs.size < 2 && live.map { it.dest }.distinct().size > 1) {
+                val alt = live.firstOrNull { !lrtDestMatch(it.dest, dest) }?.dest
+                if (!alt.isNullOrBlank()) {
+                    lrtOpposite[route.key] = BoundHit(
+                        co = "LRT",
+                        route = number,
+                        dir = "S",
+                        serviceType = "1",
+                        dest = alt,
+                        stopId = stop.id,
+                        stopName = stop.name,
+                        routeId = "",
+                        region = "",
+                        meters = meters,
+                        lat = stop.lat,
+                        lng = stop.lng,
+                    )
+                }
+            }
+            if (calls != null) {
+                etaPlain[route.key] = route.etas
+                statePlain[route.key] = route.state
+                etaState[route.key] = route.state
+                etaSlots[route.key] = route.etas
+            }
+            route
+        }
+        return Stop(
+            key = "LRT|${stop.id}",
+            co = "LRT",
+            id = stop.id,
+            name = stop.name,
+            meters = meters,
+            lat = stop.lat,
+            lng = stop.lng,
+            routes = routes,
+            nameEn = stop.nameEn,
+        )
+    }
+
+    private suspend fun loadLrtDetail(route: Route, token: Int) {
+        val idx = light ?: return
+        val along = idx.stopsOn(route.route, route.dir)
+        val stops = if (along.isNotEmpty()) {
+            along.map { DetailStop(it.stop.id, it.stop.name, it.stop.lat, it.stop.lng, it.seq) }
+        } else {
+            val only = idx.byId(route.stopId)
+            if (only == null) emptyList() else listOf(DetailStop(only.id, only.name, only.lat, only.lng, 1))
+        }
+        if (token != detailToken) return
+        detailStops = stops
+        detailReady = true
+        val gate = Semaphore(6)
+        coroutineScope {
+            detailStops.forEach { stop ->
+                launch(Dispatchers.IO) {
+                    gate.withPermit {
+                        if (token != detailToken) return@withPermit
+                        val slots = try {
+                            lrtEta(stop.id, route.route, route.dest)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        withContext(Dispatchers.Main) { publishDetailEta(token, stop.id, slots) }
+                    }
+                }
+            }
+        }
+    }
+
     private fun refreshNearby() {
         scope.launch {
+            launch { refreshLrt() }
             val page = try {
                 api.nearby(lat, lng, radius)
             } catch (_: Exception) {

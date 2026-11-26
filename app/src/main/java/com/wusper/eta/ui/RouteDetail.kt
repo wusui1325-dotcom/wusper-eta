@@ -56,6 +56,7 @@ import com.wusper.eta.data.AppModel
 import com.wusper.eta.data.DetailStop
 import com.wusper.eta.data.EtaSlot
 import com.wusper.eta.data.RouteFocus
+import com.wusper.eta.data.boardingFare
 import com.wusper.eta.data.haversineMeters
 import com.wusper.eta.data.nearestStop
 import kotlinx.coroutines.launch
@@ -91,16 +92,26 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                 InkButton(Glyphs.back, stringResource(R.string.label_back), label = stringResource(R.string.label_back)) {
                     model.closeDetail()
                 }
-                BasicText(
-                    when (focus) {
-                        is RouteFocus.Bus -> focus.route.route
-                        is RouteFocus.Mtr -> focus.name
-                    },
-                    style = Ink.detailTitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                )
+                val nearestFare = nearestStop(model.detailStops, model.lat, model.lng)?.let { boardingFare(model.detailFares[it.id]) }
+                Row(
+                    Modifier.weight(1f).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BasicText(
+                        when (focus) {
+                            is RouteFocus.Bus -> focus.route.route
+                            is RouteFocus.Mtr -> focus.name
+                        },
+                        style = Ink.detailTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (nearestFare != null) {
+                        Spacer(Modifier.width(8.dp))
+                        BasicText(nearestFare, style = Ink.detailMeta, maxLines = 1)
+                    }
+                }
                 InkButton(
                     if (saved) Glyphs.favOn else Glyphs.saved,
                     stringResource(if (saved) R.string.cd_fav_on else R.string.cd_fav_off),
@@ -136,6 +147,7 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                                 next = model.detailNext[stop.id],
                                 times = model.detailTimes[stop.id].orEmpty(),
                                 transfers = model.detailTransfers[stop.id],
+                                fare = boardingFare(model.detailFares[stop.id]),
                                 open = open,
                                 showCode = showCodes,
                                 onToggle = {
@@ -225,6 +237,7 @@ private fun StopEtaRow(
     next: EtaSlot?,
     times: List<EtaSlot>,
     transfers: List<String>?,
+    fare: String?,
     open: Boolean,
     showCode: Boolean,
     onToggle: () -> Unit,
@@ -237,7 +250,12 @@ private fun StopEtaRow(
         else -> "${next.minutes}′"
     }
     val upcoming = times.mapNotNull { it.minutes }.take(3)
-    Column(Modifier.fillMaxWidth()) {
+    val rowClick = remember(stop.id) { MutableInteractionSource() }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(rowClick, indication = null, onClick = onToggle),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -275,10 +293,18 @@ private fun StopEtaRow(
         }
         if (open) {
             Column(Modifier.padding(bottom = 16.dp)) {
-                BasicText(
-                    if (upcoming.isEmpty()) none else upcoming.joinToString("    ") { "$it′" },
-                    style = Ink.detailEta,
-                )
+                val extra = when {
+                    next == null -> ""
+                    upcoming.isEmpty() -> none
+                    else -> upcoming.joinToString("    ") { "$it′" }
+                }
+                if (extra.isNotEmpty()) {
+                    BasicText(extra, style = Ink.detailEta)
+                }
+                if (fare != null) {
+                    Spacer(Modifier.height(8.dp))
+                    BasicText(stringResource(R.string.fare_line, fare), style = Ink.detailMeta)
+                }
                 if (!transfers.isNullOrEmpty()) {
                     Spacer(Modifier.height(8.dp))
                     BasicText(

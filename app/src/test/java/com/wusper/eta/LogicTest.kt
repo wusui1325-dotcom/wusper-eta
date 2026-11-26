@@ -13,8 +13,10 @@ import com.wusper.eta.data.dedupeRouteHits
 import com.wusper.eta.data.matchesRouteQuery
 import com.wusper.eta.data.routeSearchRank
 import com.wusper.eta.data.matchesStopName
+import com.wusper.eta.data.lrtMinutes
 import com.wusper.eta.data.minutesUntil
 import com.wusper.eta.data.atDestinationTerminus
+import com.wusper.eta.data.boardingFare
 import com.wusper.eta.data.mtrLineOrder
 import com.wusper.eta.data.Stop
 import com.wusper.eta.data.FavRoute
@@ -151,6 +153,29 @@ class LogicTest {
         assertTrue(haversineMeters(22.2819, 114.1580, hit!!.lat, hit.lng) < haversineMeters(22.2819, 114.1580, far.lat, far.lng))
         val first = nearestStop(listOf(near, far), 0.0, 0.0)
         assertEquals("far", first?.id)
+    }
+
+    @Test
+    fun lightRailTimesStayOfficial() {
+        assertEquals(9, lrtMinutes("9 分鐘"))
+        assertEquals(11, lrtMinutes("11 mins"))
+        assertEquals(0, lrtMinutes("即將抵達"))
+        assertEquals(0, lrtMinutes("正在離開"))
+        assertEquals(null, lrtMinutes("-"))
+        assertEquals(null, lrtMinutes(""))
+        assertEquals(false, matchesStopName("600", "元朗", "Yuen Long"))
+        assertEquals(true, matchesStopName("元朗", "元朗", "Yuen Long"))
+        assertEquals(true, matchesStopName("yuen", "元朗", "Yuen Long"))
+    }
+
+    @Test
+    fun boardingFareOmitsMissingAndZero() {
+        assertEquals("$6.7", boardingFare(6.7))
+        assertEquals("$12", boardingFare(12.0))
+        assertEquals("$4.25", boardingFare(4.25))
+        assertEquals(null, boardingFare(null))
+        assertEquals(null, boardingFare(0.0))
+        assertEquals(null, boardingFare(-1.0))
     }
 
     @Test
