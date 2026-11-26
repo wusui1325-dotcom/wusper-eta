@@ -52,6 +52,9 @@
     <string name="search_stop">Stop search</string>
     <string name="hint_route">Route</string>
     <string name="hint_stop">Stop</string>
+    <string name="search_loading">Searching</string>
+    <string name="search_empty">No matches</string>
+    <string name="search_cached">Offline. Showing saved results</string>
     <string name="label_locate">Locate</string>
     <string name="label_map">Map</string>
     <string name="label_retry">Retry</string>

@@ -159,7 +159,17 @@ fun SearchPane(model: AppModel) {
             )
         }
         Box(Modifier.padding(horizontal = 28.dp).fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+        val listed = if (routeMode) model.foundRoutes.isNotEmpty() else model.foundStops.isNotEmpty() || model.foundMtr.isNotEmpty()
         LazyColumn(Modifier.weight(1f).padding(horizontal = 28.dp)) {
+            if (model.searching && !listed) {
+                item { SearchNote(stringResource(R.string.search_loading)) }
+            } else if (model.searchFailed && !listed) {
+                item { FailRow { model.retrySearch() } }
+            } else if (model.searchFailed) {
+                item { SearchNote(stringResource(R.string.search_cached), retry = { model.retrySearch() }) }
+            } else if (!model.searching && model.query.isNotBlank() && !listed) {
+                item { SearchNote(stringResource(R.string.search_empty)) }
+            }
             if (routeMode) {
                 items(
                     model.foundRoutes,
@@ -176,6 +186,17 @@ fun SearchPane(model: AppModel) {
                     NameRow(station.name, station.nameEn) { model.openMtr(station) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchNote(text: String, retry: (() -> Unit)? = null) {
+    Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicText(text, style = Ink.body, modifier = Modifier.weight(1f))
+        if (retry != null) {
+            Spacer(Modifier.width(8.dp))
+            InkButton(Glyphs.retry, stringResource(R.string.cd_retry), onClick = retry)
         }
     }
 }

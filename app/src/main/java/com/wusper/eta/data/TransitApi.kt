@@ -59,7 +59,7 @@ class TransitApi {
 
     suspend fun search(q: String): SearchBundle = withContext(Dispatchers.IO) {
         val url = "$WUSPER/search?q=${enc(q)}&limit=60"
-        val o = JSONObject(get(url))
+        val o = JSONObject(get(url, connectMs = 10_000, readMs = 20_000))
         SearchBundle(
             stops = (o.optJSONArray("stops") ?: JSONArray()).let { arr ->
                 buildList {
@@ -618,10 +618,10 @@ class TransitApi {
         }
     }
 
-    private fun get(url: String, gmb: Boolean = false): String {
+    private fun get(url: String, gmb: Boolean = false, connectMs: Int = 2500, readMs: Int = 3500): String {
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 2500
-            readTimeout = 3500
+            connectTimeout = connectMs
+            readTimeout = readMs
             requestMethod = "GET"
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Accept-Language", "zh-HK,zh-TW;q=0.9")

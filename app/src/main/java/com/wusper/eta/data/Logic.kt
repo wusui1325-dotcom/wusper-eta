@@ -229,6 +229,19 @@ fun routeSearchRank(query: String, route: String, dest: String): Int? {
     return null
 }
 
+fun mergeRouteMemory(existing: List<Route>, incoming: List<Route>, limit: Int = 240): List<Route> {
+    val seen = LinkedHashSet<String>()
+    val out = ArrayList<Route>()
+    for (route in incoming + existing) {
+        if (route.route.isBlank()) continue
+        val key = "${route.co}|${route.route}|${route.dir}|${route.serviceType}|${route.dest}"
+        if (!seen.add(key)) continue
+        out.add(route.copy(stopId = "", state = EtaState.Loading, etas = emptyList()))
+        if (out.size >= limit) break
+    }
+    return out
+}
+
 fun dedupeRouteHits(routes: List<Route>): List<Route> {
     val seen = LinkedHashSet<String>()
     val out = ArrayList<Route>()

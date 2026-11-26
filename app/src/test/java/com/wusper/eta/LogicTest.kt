@@ -11,6 +11,7 @@ import com.wusper.eta.data.haversineMeters
 import com.wusper.eta.data.isScheduledRemark
 import com.wusper.eta.data.dedupeRouteHits
 import com.wusper.eta.data.matchesRouteQuery
+import com.wusper.eta.data.mergeRouteMemory
 import com.wusper.eta.data.routeSearchRank
 import com.wusper.eta.data.matchesStopName
 import com.wusper.eta.data.lrtMinutes
@@ -124,6 +125,30 @@ class LogicTest {
         val unique = dedupeRouteHits(routes)
         assertEquals(2, unique.size)
         assertEquals("啟業", unique[1].dest)
+    }
+
+    @Test
+    fun citybus20xSurvivesTheLiveSearchShape() {
+        val rows = listOf(
+            Route("CTB", "20X", "", "1", "佐敦及尖沙咀", "", "", "", EtaState.Loading, emptyList()),
+            Route("GMB", "20X", "2", "1", "大埔墟站專線小巴總站", "", "2001392", "NT", EtaState.Loading, emptyList()),
+            Route("GMB", "20X", "1", "1", "大埔墟站專線小巴總站", "", "2005221", "NT", EtaState.Loading, emptyList()),
+            Route("CTB", "720X", "", "1", "中環(林士街)", "", "", "", EtaState.Loading, emptyList()),
+        )
+        val ranked = rows.mapNotNull { route ->
+            routeSearchRank("20X", route.route, route.dest)?.let { rank -> rank to route }
+        }.sortedWith(compareBy({ it.first }, { it.second.route.length }, { it.second.route }))
+        assertEquals(4, ranked.size)
+        assertEquals(0, ranked[0].first)
+        assertEquals("CTB", ranked[0].second.co)
+        assertEquals("20X", ranked[0].second.route)
+        assertEquals("佐敦及尖沙咀", ranked[0].second.dest)
+        assertEquals("720X", ranked.last().second.route)
+        val kept = mergeRouteMemory(emptyList(), rows)
+        assertEquals(4, kept.size)
+        val again = mergeRouteMemory(kept, listOf(rows[0]))
+        assertEquals(4, again.size)
+        assertEquals("CTB", again[0].co)
     }
 
     @Test

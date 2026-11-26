@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,6 +45,8 @@ class AppModel(initial: Snapshot) {
     var widgetSizes by mutableStateOf(false)
     var widgetPage by mutableStateOf(false)
     var failed by mutableStateOf(false)
+    var searching by mutableStateOf(false)
+    var searchFailed by mutableStateOf(false)
     var query by mutableStateOf("")
     var searchMode by mutableStateOf(SearchMode.Route)
     var foundStops by mutableStateOf<List<Stop>>(emptyList())
@@ -116,6 +119,7 @@ class AppModel(initial: Snapshot) {
     private var planJob: Job? = null
     private var loggedEta = false
     private var lastSearch: SearchBundle? = null
+    private var remembered = emptyList<Route>()
     private var fixListener: LocationListener? = null
     private val flipGen = HashMap<String, Int>()
     private var detailToken = 0
@@ -135,6 +139,13 @@ class AppModel(initial: Snapshot) {
             launch { refreshVisibleEtas() }
             index = withContext(Dispatchers.IO) { com.wusper.eta.Boot.awaitIndex() ?: MtrIndex.load(ctx) }
             light = withContext(Dispatchers.IO) { LightRailIndex.load(ctx) }
+            remembered = withContext(Dispatchers.IO) { RouteMemory.read(ctx) }
+            val pending = query
+            if (pending.isNotBlank()) {
+                val cached = lastSearch
+                if (!searching && !searchFailed && cached != null) publishSearch(cached, pending)
+                else publishSearch(localBundle(pending), pending)
+            }
             launch { refreshMtr() }
             launch { refreshLrt() }
             launch { refreshFavEtas() }
@@ -752,14 +763,21 @@ class AppModel(initial: Snapshot) {
         if (searchMode == mode) return
         searchMode = mode
         along = emptyList()
-        val cached = lastSearch
-        if (query.isNotBlank() && cached != null) {
-            publishSearch(cached, query)
-        } else {
+        if (query.isBlank()) {
             foundStops = emptyList()
             foundRoutes = emptyList()
             foundMtr = emptyList()
+            return
         }
+        val cached = lastSearch
+        if (!searchFailed && cached != null) publishSearch(cached, query)
+        else publishSearch(localBundle(query), query)
+    }
+
+    fun retrySearch() {
+        val value = query
+        if (value.isBlank()) return
+        onQuery(value)
     }
 
     fun onQuery(value: String) {
@@ -771,20 +789,30 @@ class AppModel(initial: Snapshot) {
             foundStops = emptyList()
             foundRoutes = emptyList()
             foundMtr = emptyList()
+            searching = false
+            searchFailed = false
             return
         }
+        searching = true
+        searchFailed = false
+        publishSearch(localBundle(value), value)
         searchJob = scope.launch {
             delay(160)
             val bundle = try {
                 api.search(value)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 if (query != value) return@launch
-                publishSearch(SearchBundle(emptyList(), emptyList(), emptyList()), value)
-                failed = foundStops.isEmpty() && foundRoutes.isEmpty() && foundMtr.isEmpty()
+                searching = false
+                publishSearch(localBundle(value), value)
+                searchFailed = true
                 return@launch
             }
             if (query != value) return@launch
-            failed = false
+            searching = false
+            searchFailed = false
+            rememberRoutes(bundle.routes)
             val idx = index
             val placed = bundle.copy(
                 mtr = bundle.mtr.map { station ->
@@ -795,6 +823,40 @@ class AppModel(initial: Snapshot) {
             lastSearch = placed
             publishSearch(placed, value)
         }
+    }
+
+    private fun rememberRoutes(routes: List<Route>) {
+        if (routes.isEmpty()) return
+        remembered = mergeRouteMemory(remembered, routes)
+        val ctx = app ?: return
+        val snapshot = remembered
+        try {
+            writer.execute { RouteMemory.write(ctx, snapshot) }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun localBundle(raw: String): SearchBundle {
+        val known = mergeRouteMemory(remembered, stops.flatMap { it.routes } + savedRoutes.map { it.asRoute() })
+        val stations = index?.stations.orEmpty().mapNotNull { station ->
+            if (!matchesStopName(raw, station.name, station.nameEn)) return@mapNotNull null
+            MtrStop(
+                sta = station.sta,
+                name = station.name,
+                meters = 0,
+                lat = station.lat,
+                lng = station.lng,
+                lines = station.lines.zip(station.lineNames).map { (code, label) ->
+                    MtrLine(code, label, emptyList(), emptyList())
+                },
+                nameEn = station.nameEn,
+            )
+        }
+        return SearchBundle(
+            stops = stops.filter { matchesStopName(raw, it.name, it.nameEn) },
+            routes = known,
+            mtr = (mtr.filter { matchesStopName(raw, it.name, it.nameEn) } + stations).distinctBy { it.sta },
+        )
     }
 
     private fun publishSearch(bundle: SearchBundle, raw: String) {
