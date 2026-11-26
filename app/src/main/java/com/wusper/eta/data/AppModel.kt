@@ -199,6 +199,8 @@ class AppModel(initial: Snapshot) {
 
     fun openMetro(id: String, key: String, name: String) {
         if (id.isBlank() || key.isBlank()) return
+        val ctx = app
+        if (ctx != null && id !in MetroStore.officialCityIds(ctx)) return
         rail = RailFocus.Metro(id, key, name)
     }
 

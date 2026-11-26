@@ -131,6 +131,20 @@ object Ink {
 }
 
 @Composable
+fun MapGestureHints(modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .padding(12.dp)
+            .background(Ink.paper)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        BasicText("點擊任意站或線路查看", style = Ink.meta)
+        BasicText("雙指捏合或伸開以縮放", style = Ink.meta, modifier = Modifier.padding(top = 2.dp))
+        BasicText("單指按住並拖動以移動", style = Ink.meta, modifier = Modifier.padding(top = 2.dp))
+    }
+}
+
+@Composable
 fun Glyph(icon: ImageVector, cd: String?, tint: androidx.compose.ui.graphics.Color, size: Dp = 22.dp) {
     Image(
         imageVector = icon,

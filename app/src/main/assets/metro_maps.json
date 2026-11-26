@@ -1,11 +1,127 @@
 {
   "1100": {
-    "url": "https://www.bjsubway.com/subway/images/subway_map.png?t=20260215",
-    "source": "北京地铁官方网站线路图 https://www.bjsubway.com/jpg.html"
+    "asset": "metro/1100.jpg",
+    "source": "北京地铁官方网站线路图 https://www.bjsubway.com/subway/images/subway_map.png?t=20260215"
+  },
+  "1200": {
+    "asset": "metro/1200.jpg",
+    "source": "天津轨道交通集团运营线路图 http://www.tjgdjt.com/yunying/content_2237.htm"
+  },
+  "1301": {
+    "asset": "metro/1301.jpg",
+    "source": "石家庄市轨道交通集团 石家庄地铁运营线路图 http://www.sjzmetro.cn/Uploads/Picture/2025/06/12/u684a865db54a2.png"
+  },
+  "1501": {
+    "asset": "metro/1501.jpg",
+    "source": "呼和浩特地铁线网图 https://hhhtmetro.com/other/dtxwt 图片 https://hhhtmetro.com/UploadModule/uploads/hsdt/2024/06/07/095668.jpg"
+  },
+  "2102": {
+    "asset": "metro/2102.jpg",
+    "source": "大连地铁线网图（大连地铁标志）https://imgbdb4.bendibao.com/dlbdb/traffic/20247/03/2024703130100_29346.png"
+  },
+  "2201": {
+    "asset": "metro/2201.jpg",
+    "source": "长春市轨道交通集团运营线路 http://www.ccqg.com/uploads/manage/images/3/20240402/665c0639733706efeb9523839c8b1ee5.png"
   },
   "3100": {
-    "url": "https://service.shmetro.com/skin/map/shmetro-map.jpg",
+    "asset": "metro/3100.jpg",
     "source": "上海地铁官方网络示意图 https://service.shmetro.com/skin/map/shmetro-map.jpg"
+  },
+  "3201": {
+    "asset": "metro/3201.jpg",
+    "source": "南京地铁运营线路示意图 https://www.njmetro.com.cn/njdtweb/dtweb/images/map_new.jpg"
+  },
+  "3202": {
+    "asset": "metro/3202.jpg",
+    "source": "无锡地铁线路导览 https://www.wxmetro.net/file/metrowebsite/2025-06/5b0ddcd9-7f96-49bf-9863-6c5a6996aa38.jpg"
+  },
+  "3203": {
+    "asset": "metro/3203.jpg",
+    "source": "徐州地铁线路导航 https://pics.xzdtjt.com/upload/20241202163618.png"
+  },
+  "3204": {
+    "asset": "metro/3204.jpg",
+    "source": "常州地铁运营线路图 https://cweb.czmetro.net.cn/static/png/route-CLC-IoGU.png"
+  },
+  "3205": {
+    "asset": "metro/3205.jpg",
+    "source": "苏州地铁运行线路图 https://www.sz-mtr.com/images/苏州轨道交通路线图.jpg"
+  },
+  "3301": {
+    "asset": "metro/3301.jpg",
+    "source": "杭州地铁运营线网图 https://www.hhtz.gov.cn/picture/0/2504101048528908902.jpg"
+  },
+  "3302": {
+    "asset": "metro/3302.jpg",
+    "source": "宁波地铁线路图 http://www.nbmetro.com/static/map-box_20250516/1.jpg?v=20251218"
+  },
+  "3303": {
+    "asset": "metro/3303.jpg",
+    "source": "温州轨道交通运营线路图 https://www.wzair.cn/SITEDATA/web27/rcms_editor/image/20250806/1754475605932070940.png"
+  },
+  "3401": {
+    "asset": "metro/3401.jpg",
+    "source": "合肥轨道公布的合肥市轨道交通运营线网图（图面印有合肥轨道标志与 www.hfgdjt.com），转载见 https://view.inews.qq.com/a/20251228A054BE00"
+  },
+  "3502": {
+    "asset": "metro/3502.jpg",
+    "source": "厦门地铁发布的厦门地铁线网图 https://img1.kxm.xmtv.cn/20230625f55510e76f15b90fe29eca3e91f7ca46.png"
+  },
+  "3601": {
+    "asset": "metro/3601.jpg",
+    "source": "南昌轨道交通集团官网线网图 https://www.ncmtr.com/"
+  },
+  "3701": {
+    "asset": "metro/3701.jpg",
+    "source": "济南轨道交通集团 济南市轨道交通线网图（示意），图上印有 www.jngdjt.cn"
+  },
+  "3702": {
+    "asset": "metro/3702.jpg",
+    "source": "青岛地铁线网图 http://www.qd-metro.com/images/bigmap.jpg"
+  },
+  "4101": {
+    "asset": "metro/4101.jpg",
+    "source": "郑州中建深铁轨道交通有限公司线路图 https://www.zzzjst.net/intro/13.html 文件 https://omo-oss-image.thefastimg.com/portal-saas-crossborder/1963531431655542785/cms/image/c3198f33-5c3c-454c-bab9-731ebdacb93c.jpg"
+  },
+  "4201": {
+    "asset": "metro/4201.jpg",
+    "source": "武汉市交通运输局 武汉轨道交通线网图 https://jtj.wuhan.gov.cn/jtzx/zwdt/202412/W020241227526164200099.png"
+  },
+  "4301": {
+    "asset": "metro/4301.jpg",
+    "source": "长沙轨道交通线网运营图 https://www.hncsmtr.com/webapp/dt/yyt.jsp 文件 https://www.hncsmtr.com/webapp/dt/images/yxxlt.jpg"
+  },
+  "4401": {
+    "asset": "metro/4401.jpg",
+    "source": "广州市人民政府公布的广州地铁线网示意图 https://www.gz.gov.cn/attachment/7/7766/7766969/10133518.pdf"
+  },
+  "4403": {
+    "asset": "metro/4403.jpg",
+    "source": "深圳市轨道交通运营线路网络图 https://www.sz.gov.cn/img/4/4457/4457528/11086804.jpg"
+  },
+  "4406": {
+    "asset": "metro/4406.jpg",
+    "source": "佛山地铁线网图 https://www.fmetro.net/xlyy/xwt 图片 https://www.fmetro.net/upload/main/contentmanage/node/image/bb0adcaa2a35406392dbd30036591301.jpg"
+  },
+  "4501": {
+    "asset": "metro/4501.jpg",
+    "source": "南宁轨道交通集团运营服务线路图 http://www.nngdjt.com/images/yyfw/line5_lar.png"
+  },
+  "5000": {
+    "asset": "metro/5000.jpg",
+    "source": "重庆市交通运输委员会 重庆轨道交通线网图 https://jtj.cq.gov.cn/zwgk_240/zfxxgkml/gggs/tzgg/202503/W020250305556615283549_ORIGIN.jpg"
+  },
+  "5101": {
+    "asset": "metro/5101.jpg",
+    "source": "成都轨道集团官网线网图（2023-02 存档）https://www.chengdurail.com/images/all.jpg"
+  },
+  "5201": {
+    "asset": "metro/5201.jpg",
+    "source": "贵州省交通运输厅 贵阳轨道交通线网图 https://jt.guizhou.gov.cn/material/Project/images/gydtxlt.jpg"
+  },
+  "6101": {
+    "asset": "metro/6101.jpg",
+    "source": "西安市交通运输局 西安轨道交通线网示意图 https://jtj.xa.gov.cn/web_files/jtj/picture/2025/12/29/202512291126487477193.jpg"
   },
   "8100": {
     "asset": "mtr_system_map.png",

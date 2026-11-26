@@ -412,6 +412,7 @@ private fun OfficialArt(
                 if (next == 1f) pan = Offset.Zero
             }
         }
+        MapGestureHints(Modifier.align(Alignment.BottomStart))
     }
 }
 

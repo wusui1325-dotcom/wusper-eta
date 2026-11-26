@@ -295,6 +295,12 @@ object MetroStore {
         return parseCities(text)
     }
 
+    /** City ids that have a verified official poster. The nation list shows only these. */
+    fun officialCityIds(context: Context): Set<String> {
+        val text = context.assets.open("metro_maps.json").bufferedReader().use { it.readText() }
+        return parsePosters(text).keys
+    }
+
     fun cities(): List<MetroCity>? = try {
         parseCities(get("https://wusper.com/api/metro/cities"))
     } catch (_: Exception) {

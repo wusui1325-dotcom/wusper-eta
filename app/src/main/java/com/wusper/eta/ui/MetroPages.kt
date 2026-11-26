@@ -73,10 +73,12 @@ fun MetroCityPane(model: AppModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var cities by remember { mutableStateOf<List<MetroCity>>(emptyList()) }
     LaunchedEffect(Unit) {
+        val allowed = withContext(Dispatchers.IO) { MetroStore.officialCityIds(context) }
+        fun List<MetroCity>.visible() = filter { it.id in allowed }
         val local = withContext(Dispatchers.IO) { MetroStore.bundledCities(context) }
-        cities = local
+        cities = local.visible()
         val remote = withContext(Dispatchers.IO) { MetroStore.cities() }
-        if (!remote.isNullOrEmpty()) cities = remote
+        if (!remote.isNullOrEmpty()) cities = remote.visible()
     }
     Column(modifier.fillMaxSize()) {
         Row(
@@ -197,34 +199,8 @@ fun MetroMapPane(model: AppModel, page: RailFocus.Metro, modifier: Modifier = Mo
         }
         Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFFF4F6F8))) {
             val art = poster
-            val net = network
             if (art != null) {
                 PosterArt(art, Modifier.fillMaxSize())
-            } else if (net != null) {
-                MetroSchematic(
-                    net,
-                    lang,
-                    emphasis,
-                    ride,
-                    start,
-                    end,
-                    picked,
-                    Modifier.fillMaxSize(),
-                ) { name ->
-                    if (!planning) {
-                        picked = name
-                        start = null
-                        end = null
-                    } else if (start == null || name == start) {
-                        start = name
-                        end = null
-                    } else if (end == null) {
-                        end = name
-                    } else {
-                        start = name
-                        end = null
-                    }
-                }
             }
         }
         val info = network
@@ -502,6 +478,7 @@ private fun PosterArt(image: ImageBitmap, modifier: Modifier) {
                 if (next == 1f) pan = Offset.Zero
             }
         }
+        MapGestureHints(Modifier.align(Alignment.BottomStart))
     }
 }
 
