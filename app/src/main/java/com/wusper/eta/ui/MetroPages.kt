@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -157,7 +158,7 @@ fun MetroMapPane(model: AppModel, page: RailFocus.Metro, modifier: Modifier = Mo
                 emphasis = null
             }
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFFF4F6F8))) {
             val net = network
             if (net != null) {
                 MetroSvg(
@@ -215,8 +216,8 @@ private fun MetroSvg(
     var vy by remember(doc) { mutableFloatStateOf(doc?.minY ?: 0f) }
     var vw by remember(doc) { mutableFloatStateOf(doc?.width ?: 1f) }
     var vh by remember(doc) { mutableFloatStateOf(doc?.height ?: 1f) }
-    val ink = Ink.black
-    val paper = Ink.paper
+    val ink = Color(0xFF1A1A1A)
+    val paper = Color.White
     val label = TextStyle(color = ink, fontSize = 12.sp)
     if (doc == null) return
     Box(modifier) {
@@ -273,13 +274,19 @@ private fun MetroSvg(
                 }
             },
         ) {
+            drawRect(Color(0xFFF4F6F8))
             val width = size.width
             val height = size.height
             fun screen(x: Float, y: Float) = toScreen(x, y, width, height, vx, vy, vw, vh)
             for (line in doc.lines) {
                 val thick = line.id == emphasis || ride?.segments?.any { it.lineId == line.id } == true
                 for (i in 0 until line.points.lastIndex) {
-                    drawLine(ink, screen(line.points[i].x, line.points[i].y), screen(line.points[i + 1].x, line.points[i + 1].y), strokeWidth = if (thick) 7f else 3.2f)
+                    drawLine(
+                        line.color,
+                        screen(line.points[i].x, line.points[i].y),
+                        screen(line.points[i + 1].x, line.points[i + 1].y),
+                        strokeWidth = if (thick) 8f else 4.5f,
+                    )
                 }
             }
             for (dot in doc.dots) {
@@ -407,7 +414,7 @@ private data class SvgDoc(
     val labels: List<SvgLabel>,
 )
 
-private data class SvgLine(val id: String, val points: List<Offset>)
+private data class SvgLine(val id: String, val points: List<Offset>, val color: Color)
 private data class SvgDot(val name: String, val x: Float, val y: Float, val r: Float)
 private data class SvgLabel(val text: String, val x: Float, val y: Float)
 
@@ -419,7 +426,7 @@ private fun parseSvg(svg: String): SvgDoc? {
     val minY = box[1].toFloatOrNull() ?: return null
     val width = box[2].toFloatOrNull() ?: return null
     val height = box[3].toFloatOrNull() ?: return null
-    val lines = Regex("""<polyline data-line="([^"]*)" points="([^"]*)"""").findAll(svg).map { match ->
+    val lines = Regex("""<polyline data-line="([^"]*)" points="([^"]*)" fill="none" stroke="([^"]*)"""").findAll(svg).map { match ->
         val pts = match.groupValues[2].split(" ").mapNotNull { pair ->
             val xy = pair.split(",")
             if (xy.size != 2) null else {
@@ -428,7 +435,7 @@ private fun parseSvg(svg: String): SvgDoc? {
                 Offset(x, y)
             }
         }
-        SvgLine(unescape(match.groupValues[1]), pts)
+        SvgLine(unescape(match.groupValues[1]), pts, parseHex(match.groupValues[3]))
     }.filter { it.points.size >= 2 }.toList()
     val dots = Regex("""<circle data-station="([^"]*)" cx="([^"]+)" cy="([^"]+)" r="([^"]+)"""").findAll(svg).map { match ->
         SvgDot(
@@ -450,6 +457,18 @@ private fun parseSvg(svg: String): SvgDoc? {
 }
 
 private fun unescape(value: String) = value.replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+private fun parseHex(raw: String): Color {
+    val hex = raw.trim().removePrefix("#")
+    val body = when (hex.length) {
+        3 -> hex.map { "$it$it" }.joinToString("")
+        6 -> hex
+        8 -> hex
+        else -> return Color(0xFF5B7CFA)
+    }
+    val value = body.toLongOrNull(16) ?: return Color(0xFF5B7CFA)
+    return if (body.length == 8) Color(value) else Color(0xFF000000 or value)
+}
 
 private fun toScreen(x: Float, y: Float, width: Float, height: Float, vx: Float, vy: Float, vw: Float, vh: Float): Offset {
     return Offset((x - vx) / vw * width, (y - vy) / vh * height)

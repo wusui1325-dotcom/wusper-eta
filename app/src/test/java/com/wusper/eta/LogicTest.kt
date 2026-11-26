@@ -178,7 +178,10 @@ class LogicTest {
         assertEquals(1, ride?.transfers)
         assertEquals(listOf("a", "b"), ride?.segments?.map { it.lineId })
         assertNull(planMetro(MetroNetwork("1", "t", "測試", listOf(a)), "S1", "S9"))
-        assertTrue(metroSvg(MetroNetwork("1", "t", "測試", listOf(a)), "zh-TW").contains("<svg"))
+        val svg = metroSvg(MetroNetwork("1", "t", "測試", listOf(a.copy(color = "#E94E1B"))), "zh-TW")
+        assertTrue(svg.contains("<svg"))
+        assertTrue(svg.contains("#E94E1B"))
+        assertTrue(!svg.contains("stroke=\"#111111\""))
         assertTrue(metroCacheFresh(1_000L, 1_000L + METRO_CACHE_MS - 1))
         assertTrue(!metroCacheFresh(1_000L, 1_000L + METRO_CACHE_MS))
     }

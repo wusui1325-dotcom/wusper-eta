@@ -32,6 +32,7 @@ data class MetroLine(
     val names: MetroNames,
     val stations: List<MetroStation>,
     val path: List<Pair<Double, Double>>,
+    val color: String = "#5B7CFA",
 )
 
 data class MetroNetwork(
@@ -190,7 +191,9 @@ fun metroSvg(network: MetroNetwork, lang: String): String {
             append(xml(line.id))
             append("\" points=\"")
             append(pts.joinToString(" ") { "${it.first},${it.second}" })
-            append("\" fill=\"none\" stroke=\"#111111\" stroke-width=\"6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>")
+            append("\" fill=\"none\" stroke=\"")
+            append(xml(line.color.ifBlank { "#5B7CFA" }))
+            append("\" stroke-width=\"8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>")
         }
         val seen = HashSet<String>()
         for (line in network.lines) {
@@ -200,8 +203,8 @@ fun metroSvg(network: MetroNetwork, lang: String): String {
                 val r = if (station.transfer) 7 else 5
                 append("<circle data-station=\"")
                 append(xml(station.name))
-                append("\" cx=\"${station.x}\" cy=\"${station.y}\" r=\"$r\" fill=\"#ffffff\" stroke=\"#111111\" stroke-width=\"1.5\"/>")
-                append("<text x=\"${station.x + 8}\" y=\"${station.y - 8}\" font-size=\"14\" fill=\"#111111\">")
+                append("\" cx=\"${station.x}\" cy=\"${station.y}\" r=\"$r\" fill=\"#ffffff\" stroke=\"#222222\" stroke-width=\"2\"/>")
+                append("<text x=\"${station.x + 8}\" y=\"${station.y - 8}\" font-size=\"14\" fill=\"#1A1A1A\">")
                 append(xml(station.names.pick(lang)))
                 append("</text>")
             }
@@ -319,6 +322,7 @@ fun parseNetwork(root: JSONObject): MetroNetwork? {
                     names = row.optJSONObject("names").names(row.optString("name")),
                     stations = stations,
                     path = row.optJSONArray("path").path(),
+                    color = row.optString("color").ifBlank { "#5B7CFA" }.let { if (it.startsWith("#")) it else "#$it" },
                 ),
             )
         }
@@ -388,6 +392,7 @@ private fun MetroNetwork.json(): JSONObject = JSONObject()
                     JSONObject()
                         .put("id", line.id)
                         .put("name", line.name)
+                        .put("color", line.color)
                         .put("names", line.names.json())
                         .put(
                             "stations",

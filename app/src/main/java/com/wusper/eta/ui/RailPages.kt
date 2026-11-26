@@ -1,9 +1,11 @@
 package com.wusper.eta.ui
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.os.Bundle
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -32,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -50,12 +53,13 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.wusper.eta.R
 import com.wusper.eta.data.AppModel
-import com.wusper.eta.data.LightRailIndex
 import com.wusper.eta.data.RailExit
+import org.json.JSONObject
+import kotlin.math.hypot
+import kotlin.math.min
 import com.wusper.eta.data.RailFocus
 import com.wusper.eta.data.UiPrefs
 import com.wusper.eta.data.atDestinationTerminus
-import kotlin.math.min
 
 @Composable
 fun RailPane(model: AppModel, modifier: Modifier = Modifier) {
@@ -70,35 +74,6 @@ fun RailPane(model: AppModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun SystemMap(model: AppModel, light: Boolean, modifier: Modifier) {
-    val context = LocalContext.current
-    val english = remember { UiPrefs.language(context) == UiPrefs.EN }
-    val atlas = model.atlas
-    val heavy = model.heavyStations()
-    val lrt = model.lightStops()
-    val dots: List<MapDot>
-    val paths: List<MapPath>
-    if (light) {
-        dots = lrt.filter { it.lat != 0.0 && it.lng != 0.0 }.map { stop ->
-            val name = if (english && stop.nameEn.isNotBlank()) stop.nameEn else stop.name
-            val busy = stop.routes.map { it.route }.distinct().size >= 4
-            MapDot(stop.id, name, stop.lat, stop.lng, busy)
-        }
-        val byId = dots.associateBy { it.id }
-        paths = lightPaths(lrt, byId)
-    } else {
-        dots = heavy.filter { it.lat != 0.0 && it.lng != 0.0 }.map { station ->
-            val name = if (english && station.nameEn.isNotBlank()) station.nameEn else station.name
-            MapDot(station.sta, name, station.lat, station.lng, station.lines.size > 1)
-        }
-        val byId = dots.associateBy { it.id }
-        paths = atlas?.lines.orEmpty().flatMap { line ->
-            val name = if (english && line.nameEn.isNotBlank()) line.nameEn else line.nameTc.ifBlank { line.code }
-            line.paths.mapNotNull { ids ->
-                val points = ids.mapNotNull { byId[it] }
-                if (points.size < 2) null else MapPath(line.code, name, points, light = false, dir = "", dest = "")
-            }
-        }
-    }
     Column(modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 4.dp),
@@ -115,16 +90,13 @@ private fun SystemMap(model: AppModel, light: Boolean, modifier: Modifier) {
             )
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            SchematicMap(
-                dots,
-                paths,
-                onDot = { dot -> model.openRailStation(if (light) "LRT" else "MTR", dot.id) },
-                onPath = { path ->
-                    if (path.light) {
-                        model.openLightRoute(path.id, path.dir, path.dest, path.points.first().id)
-                    } else {
-                        model.openHeavyLine(path.id, path.name)
-                    }
+            OfficialArt(
+                asset = if (light) "lrt_system_map.png" else "mtr_system_map.png",
+                sheet = if (light) "lrt" else "mtr",
+                onStation = { id -> model.openRailStation(if (light) "LRT" else "MTR", id) },
+                onLine = { line ->
+                    if (light) model.openLightRoute(line.code, line.dir, line.dest, line.stop)
+                    else model.openHeavyLine(line.code, line.name.ifBlank { line.code })
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -311,140 +283,123 @@ private fun stationDot() = BitmapDescriptorFactory.fromBitmap(
     },
 )
 
-private data class MapDot(val id: String, val name: String, val lat: Double, val lng: Double, val prominent: Boolean)
+private data class ArtStation(val id: String, val x: Float, val y: Float)
 
-private data class MapPath(
-    val id: String,
+private data class ArtLine(
+    val code: String,
     val name: String,
-    val points: List<MapDot>,
-    val light: Boolean,
+    val x: Float,
+    val y: Float,
+    val w: Float,
+    val h: Float,
+    val segment: Boolean,
+    val x1: Float,
+    val y1: Float,
+    val x2: Float,
+    val y2: Float,
     val dir: String,
     val dest: String,
+    val stop: String,
 )
 
-private data class GeoFrame(val minLat: Double, val maxLat: Double, val minLng: Double, val maxLng: Double)
-
-private fun lightPaths(stops: List<LightRailIndex.Stop>, byId: Map<String, MapDot>): List<MapPath> {
-    val seen = HashSet<String>()
-    val pairs = stops.flatMap { it.routes }.map { it.route to it.dir }.distinct()
-    return buildList {
-        for ((route, dir) in pairs) {
-            val along = stops.mapNotNull { stop ->
-                val visit = stop.routes.firstOrNull { it.route == route && it.dir == dir } ?: return@mapNotNull null
-                stop to visit
-            }.sortedBy { it.second.seq }
-            val ids = ArrayList<String>()
-            for ((stop, _) in along) {
-                if (ids.lastOrNull() != stop.id && byId.containsKey(stop.id)) ids.add(stop.id)
-            }
-            if (ids.size < 2) continue
-            val key = ids.joinToString(">")
-            if (!seen.add(key) || ids.asReversed().joinToString(">") in seen) continue
-            val points = ids.mapNotNull { byId[it] }
-            if (points.size < 2) continue
-            val dest = along.lastOrNull()?.second?.destTc.orEmpty()
-            add(MapPath(route, route, points, light = true, dir = dir, dest = dest))
-        }
-    }
-}
+private data class ArtSheet(val stations: List<ArtStation>, val lines: List<ArtLine>)
 
 @Composable
-private fun SchematicMap(
-    dots: List<MapDot>,
-    paths: List<MapPath>,
-    onDot: (MapDot) -> Unit,
-    onPath: (MapPath) -> Unit,
+private fun OfficialArt(
+    asset: String,
+    sheet: String,
+    onStation: (String) -> Unit,
+    onLine: (ArtLine) -> Unit,
     modifier: Modifier,
 ) {
-    val measurer = rememberTextMeasurer()
-    var scale by remember(dots) { mutableFloatStateOf(1f) }
-    var pan by remember(dots) { mutableStateOf(Offset.Zero) }
-    val frame = remember(dots) { frameOf(dots) }
-    val label = TextStyle(color = Ink.black, fontSize = 11.sp)
-    val lineLabel = TextStyle(color = Ink.black, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-    val ink = Ink.black
+    val context = LocalContext.current
+    val image = remember(asset) {
+        context.assets.open(asset).use { BitmapFactory.decodeStream(it) }.asImageBitmap()
+    }
+    val art = remember(sheet) {
+        val text = context.assets.open("rail_hits.json").bufferedReader().use { it.readText() }
+        parseArt(JSONObject(text).getJSONObject(sheet))
+    }
+    var scale by remember(asset) { mutableFloatStateOf(1f) }
+    var pan by remember(asset) { mutableStateOf(Offset.Zero) }
     Box(modifier) {
-    androidx.compose.foundation.Canvas(
-        Modifier.fillMaxSize().pointerInput(dots, paths, frame) {
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                var moved = false
-                var pinch = false
-                var previous = down.position
-                var span = 0f
-                while (true) {
-                    val event = awaitPointerEvent()
-                    val pressed = event.changes.filter { it.pressed }
-                    if (pressed.isEmpty()) break
-                    if (pressed.size >= 2) {
-                        pinch = true
-                        val now = (pressed[0].position - pressed[1].position).getDistance()
-                        if (span > 0f && now > 0f) {
-                            scale = (scale * (now / span)).coerceIn(1f, 8f)
-                            if (scale == 1f) pan = Offset.Zero
+        Canvas(
+            Modifier.fillMaxSize().pointerInput(art, image) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var moved = false
+                    var pinch = false
+                    var previous = down.position
+                    var span = 0f
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val pressed = event.changes.filter { it.pressed }
+                        if (pressed.isEmpty()) break
+                        val fit = min(size.width / image.width.toFloat(), size.height / image.height.toFloat())
+                        if (pressed.size >= 2) {
+                            pinch = true
+                            val now = (pressed[0].position - pressed[1].position).getDistance()
+                            if (span > 8f && now > 8f) {
+                                val factor = (span / now).coerceIn(0.5f, 2f)
+                                val mid = Offset(
+                                    (pressed[0].position.x + pressed[1].position.x) / 2f,
+                                    (pressed[0].position.y + pressed[1].position.y) / 2f,
+                                )
+                                val before = screenToImage(mid, size.width.toFloat(), size.height.toFloat(), image.width, image.height, scale, pan)
+                                scale = (scale * (1f / factor)).coerceIn(1f, 8f)
+                                val after = screenToImage(mid, size.width.toFloat(), size.height.toFloat(), image.width, image.height, scale, pan)
+                                pan += Offset((after.x - before.x) * fit * scale, (after.y - before.y) * fit * scale)
+                            }
+                            span = now
+                        } else {
+                            val point = pressed[0].position
+                            val delta = point - previous
+                            if (delta.getDistance() > 5f) moved = true
+                            if (moved && !pinch) pan += delta
+                            previous = point
+                            span = 0f
                         }
-                        span = now
-                    } else {
-                        val point = pressed[0].position
-                        val delta = point - previous
-                        if (delta.getDistance() > 6f) moved = true
-                        if (moved && !pinch) pan += delta
-                        previous = point
-                        span = 0f
+                        event.changes.forEach { it.consume() }
                     }
-                    event.changes.forEach { it.consume() }
-                }
-                if (!moved && !pinch && frame != null) {
-                    val width = size.width.toFloat()
-                    val height = size.height.toFloat()
-                    val hitDot = dots.minByOrNull { dot ->
-                        (project(width, height, frame, scale, pan, dot.lat, dot.lng) - down.position).getDistance()
-                    }
-                    val dotDistance = hitDot?.let {
-                        (project(width, height, frame, scale, pan, it.lat, it.lng) - down.position).getDistance()
-                    } ?: Float.MAX_VALUE
-                    if (hitDot != null && dotDistance <= 28f) {
-                        onDot(hitDot)
-                    } else {
-                        var best = Float.MAX_VALUE
-                        var chosen: MapPath? = null
-                        for (path in paths) {
-                            val placed = path.points.map { project(width, height, frame, scale, pan, it.lat, it.lng) }
-                            for (i in 0 until placed.lastIndex) {
-                                val distance = segmentDistance(down.position, placed[i], placed[i + 1])
+                    if (!moved && !pinch) {
+                        val at = screenToImage(down.position, size.width.toFloat(), size.height.toFloat(), image.width, image.height, scale, pan)
+                        val station = art.stations.minByOrNull { hypot((it.x - at.x).toDouble(), (it.y - at.y).toDouble()) }
+                        val stationDistance = station?.let { hypot((it.x - at.x).toDouble(), (it.y - at.y).toDouble()) } ?: Double.MAX_VALUE
+                        if (station != null && stationDistance <= 36.0) {
+                            onStation(station.id)
+                        } else {
+                            var best = Double.MAX_VALUE
+                            var chosen: ArtLine? = null
+                            for (line in art.lines) {
+                                val distance = if (line.segment) {
+                                    hypotDistance(at, line.x1, line.y1, line.x2, line.y2)
+                                } else if (at.x in (line.x - 12f)..(line.x + line.w + 12f) && at.y in (line.y - 12f)..(line.y + line.h + 12f)) {
+                                    0.0
+                                } else {
+                                    Double.MAX_VALUE
+                                }
                                 if (distance < best) {
                                     best = distance
-                                    chosen = path
+                                    chosen = line
                                 }
                             }
+                            if (chosen != null && best <= 22.0) onLine(chosen)
                         }
-                        if (chosen != null && best <= 22f) onPath(chosen)
                     }
                 }
-            }
-        },
-    ) {
-        val geo = frame ?: return@Canvas
-        val width = size.width
-        val height = size.height
-        for (path in paths) {
-            val placed = path.points.map { project(width, height, geo, scale, pan, it.lat, it.lng) }
-            for (i in 0 until placed.lastIndex) {
-                drawLine(ink, placed[i], placed[i + 1], strokeWidth = if (path.light) 2.2f else 3f)
-            }
-            val mid = placed[placed.size * 2 / 5]
-            val text = measurer.measure(path.name, lineLabel)
-            drawText(text, topLeft = Offset(mid.x + 8f, mid.y - text.size.height - 4f))
+            },
+        ) {
+            val fit = min(size.width / image.width, size.height / image.height)
+            val dw = image.width * fit * scale
+            val dh = image.height * fit * scale
+            val ox = (size.width - image.width * fit) / 2f + pan.x
+            val oy = (size.height - image.height * fit) / 2f + pan.y
+            drawImage(
+                image,
+                dstOffset = androidx.compose.ui.unit.IntOffset(ox.toInt(), oy.toInt()),
+                dstSize = androidx.compose.ui.unit.IntSize(dw.toInt().coerceAtLeast(1), dh.toInt().coerceAtLeast(1)),
+            )
         }
-        for (dot in dots) {
-            val at = project(width, height, geo, scale, pan, dot.lat, dot.lng)
-            drawCircle(ink, radius = if (dot.prominent) 6.5f else 4.5f, center = at)
-            if (scale >= 1.7f || dot.prominent) {
-                val text = measurer.measure(dot.name, label)
-                drawText(text, topLeft = Offset(at.x + 8f, at.y + 4f))
-            }
-        }
-    }
         Column(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             InkButton(Glyphs.zoomIn, stringResource(R.string.cd_zoom_in), label = stringResource(R.string.cd_zoom_in)) {
                 scale = (scale * 1.25f).coerceIn(1f, 8f)
@@ -459,47 +414,60 @@ private fun SchematicMap(
     }
 }
 
-private fun frameOf(dots: List<MapDot>): GeoFrame? {
-    if (dots.isEmpty()) return null
-    var minLat = Double.POSITIVE_INFINITY
-    var maxLat = Double.NEGATIVE_INFINITY
-    var minLng = Double.POSITIVE_INFINITY
-    var maxLng = Double.NEGATIVE_INFINITY
-    for (dot in dots) {
-        if (dot.lat < minLat) minLat = dot.lat
-        if (dot.lat > maxLat) maxLat = dot.lat
-        if (dot.lng < minLng) minLng = dot.lng
-        if (dot.lng > maxLng) maxLng = dot.lng
+private fun parseArt(root: JSONObject): ArtSheet {
+    val stations = buildList {
+        val arr = root.optJSONArray("stations") ?: return@buildList
+        for (i in 0 until arr.length()) {
+            val row = arr.optJSONObject(i) ?: continue
+            val id = row.optString("id")
+            if (id.isBlank()) continue
+            add(ArtStation(id, row.optDouble("x").toFloat(), row.optDouble("y").toFloat()))
+        }
     }
-    return GeoFrame(minLat, maxLat, minLng, maxLng)
+    val lines = buildList {
+        val arr = root.optJSONArray("lines") ?: return@buildList
+        for (i in 0 until arr.length()) {
+            val row = arr.optJSONObject(i) ?: continue
+            val code = row.optString("code")
+            if (code.isBlank()) continue
+            val segment = row.has("x1")
+            add(
+                ArtLine(
+                    code = code,
+                    name = row.optString("name"),
+                    x = row.optDouble("x").toFloat(),
+                    y = row.optDouble("y").toFloat(),
+                    w = row.optDouble("w").toFloat(),
+                    h = row.optDouble("h").toFloat(),
+                    segment = segment,
+                    x1 = row.optDouble("x1").toFloat(),
+                    y1 = row.optDouble("y1").toFloat(),
+                    x2 = row.optDouble("x2").toFloat(),
+                    y2 = row.optDouble("y2").toFloat(),
+                    dir = row.optString("dir").ifBlank { "1" },
+                    dest = row.optString("dest"),
+                    stop = row.optString("stop"),
+                ),
+            )
+        }
+    }
+    return ArtSheet(stations, lines)
 }
 
-private fun project(width: Float, height: Float, frame: GeoFrame, scale: Float, pan: Offset, lat: Double, lng: Double): Offset {
-    val padX = 48f
-    val padTop = 28f
-    val padBottom = 108f
-    val spanLng = (frame.maxLng - frame.minLng).coerceAtLeast(1e-4)
-    val spanLat = (frame.maxLat - frame.minLat).coerceAtLeast(1e-4)
-    val availW = (width - padX * 2f).coerceAtLeast(1f)
-    val availH = (height - padTop - padBottom).coerceAtLeast(1f)
-    val fit = min(availW / spanLng.toFloat(), availH / spanLat.toFloat())
-    val contentW = spanLng.toFloat() * fit
-    val contentH = spanLat.toFloat() * fit
-    val originX = (width - contentW) / 2f
-    val originY = padTop + (availH - contentH) / 2f
-    val x = originX + ((lng - frame.minLng) / spanLng).toFloat() * contentW
-    val y = originY + ((frame.maxLat - lat) / spanLat).toFloat() * contentH
-    val cx = width / 2f
-    val cy = height / 2f
-    return Offset(cx + (x - cx) * scale + pan.x, cy + (y - cy) * scale + pan.y)
+private fun screenToImage(point: Offset, viewW: Float, viewH: Float, imgW: Int, imgH: Int, scale: Float, pan: Offset): Offset {
+    val fit = min(viewW / imgW, viewH / imgH)
+    val ox = (viewW - imgW * fit) / 2f + pan.x
+    val oy = (viewH - imgH * fit) / 2f + pan.y
+    return Offset((point.x - ox) / (fit * scale), (point.y - oy) / (fit * scale))
 }
 
-private fun segmentDistance(point: Offset, start: Offset, end: Offset): Float {
-    val dx = end.x - start.x
-    val dy = end.y - start.y
+private fun hypotDistance(point: Offset, x1: Float, y1: Float, x2: Float, y2: Float): Double {
+    val dx = x2 - x1
+    val dy = y2 - y1
     val len = dx * dx + dy * dy
-    if (len <= 1f) return (point - start).getDistance()
-    val t = (((point.x - start.x) * dx + (point.y - start.y) * dy) / len).coerceIn(0f, 1f)
-    val projected = Offset(start.x + dx * t, start.y + dy * t)
-    return (point - projected).getDistance()
+    if (len <= 1f) return hypot((point.x - x1).toDouble(), (point.y - y1).toDouble())
+    val t = (((point.x - x1) * dx + (point.y - y1) * dy) / len).coerceIn(0f, 1f)
+    val px = x1 + dx * t
+    val py = y1 + dy * t
+    return hypot((point.x - px).toDouble(), (point.y - py).toDouble())
 }
