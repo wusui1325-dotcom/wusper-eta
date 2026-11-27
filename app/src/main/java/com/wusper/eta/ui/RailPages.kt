@@ -7,10 +7,12 @@ import android.graphics.Paint
 import android.os.Bundle
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,32 +21,41 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.MapView
@@ -52,15 +63,14 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.wusper.eta.R
-import androidx.compose.ui.graphics.drawscope.withTransform
 import com.wusper.eta.data.AppModel
 import com.wusper.eta.data.RailExit
+import com.wusper.eta.data.RailFocus
+import com.wusper.eta.data.atDestinationTerminus
 import com.wusper.eta.data.uniformFit
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import kotlin.math.hypot
-import com.wusper.eta.data.RailFocus
-import com.wusper.eta.data.UiPrefs
-import com.wusper.eta.data.atDestinationTerminus
 
 @Composable
 fun RailPane(model: AppModel, modifier: Modifier = Modifier) {
@@ -75,13 +85,25 @@ fun RailPane(model: AppModel, modifier: Modifier = Modifier) {
 
 @Composable
 private fun SystemMap(model: AppModel, light: Boolean, modifier: Modifier) {
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().background(Ink.paper)) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 4.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             InkButton(Glyphs.back, stringResource(R.string.label_back), label = stringResource(R.string.label_back)) {
                 model.closeRail()
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .background(Ink.black),
+                contentAlignment = Alignment.Center,
+            ) {
+                Glyph(if (light) Glyphs.lightRail else Glyphs.mtr, null, Ink.paper, 14.dp)
             }
             Spacer(Modifier.width(8.dp))
             BasicText(
@@ -90,6 +112,7 @@ private fun SystemMap(model: AppModel, light: Boolean, modifier: Modifier) {
                 maxLines = 1,
             )
         }
+        Hair()
         Box(Modifier.weight(1f).fillMaxWidth()) {
             OfficialArt(
                 asset = if (light) "lrt_system_map.png" else "mtr_system_map.png",
@@ -101,9 +124,17 @@ private fun SystemMap(model: AppModel, light: Boolean, modifier: Modifier) {
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+            val dockShape = RoundedCornerShape(999.dp)
             Row(
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 14.dp)
+                    .clip(dockShape)
+                    .background(Ink.paper.copy(alpha = 0.95f))
+                    .border(Ink.lineWidth, Ink.line, dockShape)
+                    .padding(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 InkButton(
                     Glyphs.mtr,
@@ -111,9 +142,8 @@ private fun SystemMap(model: AppModel, light: Boolean, modifier: Modifier) {
                     selected = !light,
                     label = stringResource(R.string.rail_mtr),
                 ) { model.showRailMap(false) }
-                Spacer(Modifier.width(8.dp))
                 InkButton(
-                    Glyphs.along,
+                    Glyphs.lightRail,
                     stringResource(R.string.rail_lrt),
                     selected = light,
                     label = stringResource(R.string.rail_lrt),
@@ -134,13 +164,25 @@ private fun StationPane(model: AppModel, page: RailFocus.Station, modifier: Modi
     val heavyStation = page.kind != "LRT"
     val exits = model.exitsOf(if (heavyStation) page.id else "")
     var exitsOpen by remember(page.id) { mutableStateOf(false) }
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().background(Ink.paper)) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 4.dp),
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             InkButton(Glyphs.back, stringResource(R.string.label_back), label = stringResource(R.string.label_back)) {
                 model.closeRail()
+            }
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Ink.black),
+                contentAlignment = Alignment.Center,
+            ) {
+                Glyph(if (heavyStation) Glyphs.mtr else Glyphs.lightRail, null, Ink.paper, 15.dp)
             }
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
@@ -150,92 +192,135 @@ private fun StationPane(model: AppModel, page: RailFocus.Station, modifier: Modi
                 }
             }
         }
+        Hair()
         if (lat != 0.0 && lng != 0.0) {
-            StationMap(lat, lng, name, Modifier.fillMaxWidth().height(240.dp))
+            StationMap(lat, lng, name, Modifier.fillMaxWidth().height(230.dp))
+            Hair()
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            Modifier
-                .widthIn(max = 640.dp)
-                .fillMaxSize()
-                .padding(horizontal = 28.dp),
-        ) {
-            if (heavyStation || exits.isNotEmpty()) {
-                item(key = "exits", contentType = "exits") {
-                    ExitBlock(exits, exitsOpen) { exitsOpen = !exitsOpen }
+            LazyColumn(
+                Modifier
+                    .widthIn(max = 640.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+            ) {
+                if (heavyStation || exits.isNotEmpty()) {
+                    item(key = "exits", contentType = "exits") {
+                        ExitBlock(exits, exitsOpen) { exitsOpen = !exitsOpen }
+                    }
                 }
-            }
-            if (heavy != null) {
-                items(heavy.lines.zip(heavy.lineNames), key = { "line-${it.first}" }, contentType = { "route" }) { (code, label) ->
-                    ServingRow(label, "") { model.openHeavyLine(code, label) }
+                if (heavy != null) {
+                    items(heavy.lines.zip(heavy.lineNames), key = { "line-${it.first}" }, contentType = { "route" }) { (code, label) ->
+                        ServingRow(Glyphs.mtr, label, "") { model.openHeavyLine(code, label) }
+                    }
                 }
-            }
-            if (stop != null) {
-                val routes = stop.routes.groupBy { it.route }.map { (_, visits) ->
-                    visits.firstOrNull { !atDestinationTerminus(stop.name, it.destTc) } ?: visits.first()
-                }
-                items(routes, key = { "lrt-${it.route}" }, contentType = { "route" }) { visit ->
-                    val bound = if (visit.destTc.isBlank()) "" else stringResource(R.string.bound_to, visit.destTc)
-                    ServingRow(visit.route, bound) {
-                        model.openLightRoute(visit.route, visit.dir, visit.destTc, stop.id)
+                if (stop != null) {
+                    val routes = stop.routes.groupBy { it.route }.map { (_, visits) ->
+                        visits.firstOrNull { !atDestinationTerminus(stop.name, it.destTc) } ?: visits.first()
+                    }
+                    items(routes, key = { "lrt-${it.route}" }, contentType = { "route" }) { visit ->
+                        val bound = if (visit.destTc.isBlank()) "" else stringResource(R.string.bound_to, visit.destTc)
+                        ServingRow(Glyphs.lightRail, visit.route, bound) {
+                            model.openLightRoute(visit.route, visit.dir, visit.destTc, stop.id)
+                        }
                     }
                 }
             }
-        }
         }
     }
 }
 
 @Composable
 private fun ExitBlock(exits: List<RailExit>, open: Boolean, onToggle: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp, bottom = 6.dp)
+            .clip(shape)
+            .background(Ink.wash)
+            .border(Ink.lineWidth, Ink.line, shape),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onToggle)
-                .padding(vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Glyph(Glyphs.chevron, null, Ink.black, 22.dp)
+            Glyph(Glyphs.exit, null, Ink.black, 18.dp)
             Spacer(Modifier.width(8.dp))
-            BasicText(stringResource(R.string.rail_exit), style = Ink.title)
+            BasicText(stringResource(R.string.rail_exit), style = Ink.title, modifier = Modifier.weight(1f))
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Ink.paper)
+                    .border(Ink.lineWidth, Ink.line, CircleShape)
+                    .graphicsLayer { rotationZ = if (open) 180f else 0f },
+                contentAlignment = Alignment.Center,
+            ) {
+                Glyph(Glyphs.chevron, null, Ink.black, 15.dp)
+            }
         }
         if (open) {
-            exits.forEach { exit ->
-                BasicText(exit.exit, style = Ink.body, modifier = Modifier.padding(top = 8.dp))
-                exit.places.forEach { place ->
-                    BasicText(place, style = Ink.meta, modifier = Modifier.padding(top = 4.dp))
+            Hair()
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                exits.forEachIndexed { idx, exit ->
+                    if (idx > 0) {
+                        Spacer(Modifier.height(10.dp))
+                        Hair()
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    StreamlinedPill(exit.exit, icon = Glyphs.exit, inverted = true)
+                    exit.places.forEach { place ->
+                        BasicText(place, style = Ink.meta, modifier = Modifier.padding(top = 4.dp, start = 2.dp))
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
             }
-        } else {
-            Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
         }
     }
 }
 
 @Composable
-private fun ServingRow(title: String, bound: String, onClick: () -> Unit) {
-    Column(
+private fun ServingRow(icon: ImageVector, title: String, bound: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
         Modifier
             .fillMaxWidth()
-            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+            .padding(vertical = 4.dp)
+            .clip(shape)
+            .background(Ink.wash)
+            .border(Ink.lineWidth, Ink.line, shape)
+            .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            BasicText(title, style = Ink.arrivalRoute, maxLines = 1, softWrap = false)
-            if (bound.isNotEmpty()) {
-                Spacer(Modifier.width(4.dp))
-                BasicText(
-                    bound,
-                    style = Ink.arrivalBound,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(Ink.black)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Glyph(icon, null, Ink.paper, 15.dp)
+            Spacer(Modifier.width(5.dp))
+            BasicText(title, style = Ink.route.copy(color = Ink.paper), maxLines = 1, softWrap = false)
         }
-        Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+        if (bound.isNotEmpty()) {
+            Spacer(Modifier.width(10.dp))
+            BasicText(
+                bound,
+                style = Ink.arrivalBound,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        Spacer(Modifier.width(8.dp))
+        Glyph(Glyphs.chevronRight, null, Ink.mute, 16.dp)
     }
 }
 
@@ -272,14 +357,25 @@ private fun StationMap(lat: Double, lng: Double, name: String, modifier: Modifie
 }
 
 private fun stationDot() = BitmapDescriptorFactory.fromBitmap(
-    Bitmap.createBitmap(28, 28, Bitmap.Config.ARGB_8888).also { bitmap ->
-        Canvas(bitmap).drawCircle(
-            14f,
-            14f,
-            8f,
+    Bitmap.createBitmap(34, 34, Bitmap.Config.ARGB_8888).also { bitmap ->
+        val canvas = Canvas(bitmap)
+        canvas.drawCircle(
+            17f,
+            17f,
+            11f,
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.BLACK
+                color = android.graphics.Color.rgb(11, 11, 12)
                 style = Paint.Style.FILL
+            },
+        )
+        canvas.drawCircle(
+            17f,
+            17f,
+            9f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                style = Paint.Style.STROKE
+                strokeWidth = 3f
             },
         )
     },
@@ -315,6 +411,9 @@ private fun OfficialArt(
     modifier: Modifier,
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val onStationNow by rememberUpdatedState(onStation)
+    val onLineNow by rememberUpdatedState(onLine)
     val image = remember(asset) {
         context.assets.open(asset).use { BitmapFactory.decodeStream(it) }.asImageBitmap()
     }
@@ -324,20 +423,57 @@ private fun OfficialArt(
     }
     var scale by remember(asset) { mutableFloatStateOf(1f) }
     var pan by remember(asset) { mutableStateOf(Offset.Zero) }
-    Box(modifier) {
+    var viewport by remember(asset) { mutableStateOf(IntSize.Zero) }
+    var tapFeedback by remember(asset) { mutableStateOf<Offset?>(null) }
+
+    LaunchedEffect(tapFeedback) {
+        if (tapFeedback != null) {
+            delay(320)
+            tapFeedback = null
+        }
+    }
+
+    fun zoomAround(targetScale: Float, pivot: Offset) {
+        val vw = viewport.width.toFloat()
+        val vh = viewport.height.toFloat()
+        val clamped = targetScale.coerceIn(1f, 8f)
+        if (vw <= 0f || vh <= 0f) {
+            scale = clamped
+            if (clamped == 1f) pan = Offset.Zero
+            return
+        }
+        val fit = uniformFit(vw, vh, image.width.toFloat(), image.height.toFloat())
+        val before = screenToImage(pivot, vw, vh, image.width, image.height, scale, pan)
+        scale = clamped
+        val after = screenToImage(pivot, vw, vh, image.width, image.height, scale, pan)
+        val shifted = pan + Offset((after.x - before.x) * fit * scale, (after.y - before.y) * fit * scale)
+        pan = clampMapPan(shifted, vw, vh, image.width, image.height, scale)
+    }
+
+    val stationScreenRadiusPx = with(density) { 26.dp.toPx() }
+    val lineScreenRadiusPx = with(density) { 18.dp.toPx() }
+
+    Box(modifier.onSizeChanged { viewport = it }) {
         Canvas(
             Modifier.fillMaxSize().pointerInput(art, image) {
                 awaitEachGesture {
+                    val slop = viewConfiguration.touchSlop
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var moved = false
                     var pinch = false
                     var previous = down.position
+                    var lastPos = down.position
                     var span = 0f
                     while (true) {
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
-                        if (pressed.isEmpty()) break
-                        val fit = uniformFit(size.width.toFloat(), size.height.toFloat(), image.width.toFloat(), image.height.toFloat())
+                        if (pressed.isEmpty()) {
+                            event.changes.firstOrNull()?.let { lastPos = it.position }
+                            break
+                        }
+                        val vw = size.width.toFloat()
+                        val vh = size.height.toFloat()
+                        val fit = uniformFit(vw, vh, image.width.toFloat(), image.height.toFloat())
                         if (pressed.size >= 2) {
                             pinch = true
                             val now = (pressed[0].position - pressed[1].position).getDistance()
@@ -347,45 +483,60 @@ private fun OfficialArt(
                                     (pressed[0].position.x + pressed[1].position.x) / 2f,
                                     (pressed[0].position.y + pressed[1].position.y) / 2f,
                                 )
-                                val before = screenToImage(mid, size.width.toFloat(), size.height.toFloat(), image.width, image.height, scale, pan)
+                                val before = screenToImage(mid, vw, vh, image.width, image.height, scale, pan)
                                 scale = (scale * (1f / factor)).coerceIn(1f, 8f)
-                                val after = screenToImage(mid, size.width.toFloat(), size.height.toFloat(), image.width, image.height, scale, pan)
-                                pan += Offset((after.x - before.x) * fit * scale, (after.y - before.y) * fit * scale)
+                                val after = screenToImage(mid, vw, vh, image.width, image.height, scale, pan)
+                                pan = clampMapPan(
+                                    pan + Offset((after.x - before.x) * fit * scale, (after.y - before.y) * fit * scale),
+                                    vw, vh, image.width, image.height, scale,
+                                )
                             }
                             span = now
                         } else {
                             val point = pressed[0].position
+                            lastPos = point
                             val delta = point - previous
-                            if (delta.getDistance() > 5f) moved = true
-                            if (moved && !pinch) pan += delta
+                            if ((point - down.position).getDistance() > slop) moved = true
+                            if (moved && !pinch) {
+                                pan = clampMapPan(pan + delta, vw, vh, image.width, image.height, scale)
+                            }
                             previous = point
                             span = 0f
                         }
                         event.changes.forEach { it.consume() }
                     }
                     if (!moved && !pinch) {
-                        val at = screenToImage(down.position, size.width.toFloat(), size.height.toFloat(), image.width, image.height, scale, pan)
+                        val vw = size.width.toFloat()
+                        val vh = size.height.toFloat()
+                        val fit = uniformFit(vw, vh, image.width.toFloat(), image.height.toFloat())
+                        val effScale = (fit * scale).coerceAtLeast(0.001f)
+                        val at = screenToImage(lastPos, vw, vh, image.width, image.height, scale, pan)
+                        val stationRadius = (stationScreenRadiusPx / effScale).coerceIn(16f, 64f).toDouble()
+                        val lineRadius = (lineScreenRadiusPx / effScale).coerceIn(12f, 38f).toDouble()
+
                         val station = art.stations.minByOrNull { hypot((it.x - at.x).toDouble(), (it.y - at.y).toDouble()) }
                         val stationDistance = station?.let { hypot((it.x - at.x).toDouble(), (it.y - at.y).toDouble()) } ?: Double.MAX_VALUE
-                        if (station != null && stationDistance <= 36.0) {
-                            onStation(station.id)
+                        if (station != null && stationDistance <= stationRadius) {
+                            tapFeedback = Offset(station.x, station.y)
+                            onStationNow(station.id)
                         } else {
                             var best = Double.MAX_VALUE
                             var chosen: ArtLine? = null
                             for (line in art.lines) {
                                 val distance = if (line.segment) {
                                     hypotDistance(at, line.x1, line.y1, line.x2, line.y2)
-                                } else if (at.x in (line.x - 12f)..(line.x + line.w + 12f) && at.y in (line.y - 12f)..(line.y + line.h + 12f)) {
-                                    0.0
                                 } else {
-                                    Double.MAX_VALUE
+                                    rectDistance(at, line.x, line.y, line.w, line.h)
                                 }
                                 if (distance < best) {
                                     best = distance
                                     chosen = line
                                 }
                             }
-                            if (chosen != null && best <= 22.0) onLine(chosen)
+                            if (chosen != null && best <= lineRadius) {
+                                tapFeedback = at
+                                onLineNow(chosen)
+                            }
                         }
                     }
                 }
@@ -400,20 +551,62 @@ private fun OfficialArt(
             }) {
                 drawImage(image)
             }
-        }
-        Column(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-            InkButton(Glyphs.zoomIn, stringResource(R.string.cd_zoom_in), label = stringResource(R.string.cd_zoom_in)) {
-                scale = (scale * 1.25f).coerceIn(1f, 8f)
+            tapFeedback?.let { hit ->
+                val sx = ox + hit.x * fit * scale
+                val sy = oy + hit.y * fit * scale
+                drawCircle(Color(0x330B0B0C), radius = 26f, center = Offset(sx, sy))
+                drawCircle(Color(0xFF0B0B0C), radius = 16f, center = Offset(sx, sy), style = Stroke(width = 3f))
             }
-            Spacer(Modifier.height(4.dp))
+        }
+        Column(
+            Modifier.align(Alignment.TopEnd).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            InkButton(Glyphs.zoomIn, stringResource(R.string.cd_zoom_in), label = stringResource(R.string.cd_zoom_in)) {
+                zoomAround(scale * 1.35f, Offset(viewport.width / 2f, viewport.height / 2f))
+            }
             InkButton(Glyphs.zoomOut, stringResource(R.string.cd_zoom_out), label = stringResource(R.string.cd_zoom_out)) {
-                val next = (scale * 0.8f).coerceIn(1f, 8f)
-                scale = next
-                if (next == 1f) pan = Offset.Zero
+                zoomAround(scale / 1.35f, Offset(viewport.width / 2f, viewport.height / 2f))
+            }
+            if (scale > 1.01f || pan != Offset.Zero) {
+                InkButton(Glyphs.center, stringResource(R.string.cd_center), label = stringResource(R.string.cd_center)) {
+                    scale = 1f
+                    pan = Offset.Zero
+                }
             }
         }
         MapGestureHints(Modifier.align(Alignment.BottomStart))
     }
+}
+
+internal fun clampMapPan(
+    candidate: Offset,
+    viewW: Float,
+    viewH: Float,
+    imgW: Int,
+    imgH: Int,
+    scale: Float,
+): Offset {
+    if (viewW <= 0f || viewH <= 0f || imgW <= 0 || imgH <= 0) return Offset.Zero
+    val fit = uniformFit(viewW, viewH, imgW.toFloat(), imgH.toFloat())
+    val baseOx = (viewW - imgW * fit) / 2f
+    val baseOy = (viewH - imgH * fit) / 2f
+    val scaledW = imgW * fit * scale
+    val scaledH = imgH * fit * scale
+    val marginX = viewW * 0.12f
+    val marginY = viewH * 0.12f
+    val clampedX = if (scaledW <= viewW) {
+        (viewW - scaledW) / 2f - baseOx
+    } else {
+        candidate.x.coerceIn(viewW - scaledW - marginX - baseOx, marginX - baseOx)
+    }
+    val clampedY = if (scaledH <= viewH) {
+        (viewH - scaledH) / 2f - baseOy
+    } else {
+        candidate.y.coerceIn(viewH - scaledH - marginY - baseOy, marginY - baseOy)
+    }
+    return Offset(clampedX, clampedY)
 }
 
 private fun parseArt(root: JSONObject): ArtSheet {
@@ -461,6 +654,20 @@ private fun screenToImage(point: Offset, viewW: Float, viewH: Float, imgW: Int, 
     val ox = (viewW - imgW * fit) / 2f + pan.x
     val oy = (viewH - imgH * fit) / 2f + pan.y
     return Offset((point.x - ox) / (fit * scale), (point.y - oy) / (fit * scale))
+}
+
+private fun rectDistance(point: Offset, x: Float, y: Float, w: Float, h: Float): Double {
+    val dx = when {
+        point.x < x -> x - point.x
+        point.x > x + w -> point.x - (x + w)
+        else -> 0f
+    }
+    val dy = when {
+        point.y < y -> y - point.y
+        point.y > y + h -> point.y - (y + h)
+        else -> 0f
+    }
+    return hypot(dx.toDouble(), dy.toDouble())
 }
 
 private fun hypotDistance(point: Offset, x1: Float, y1: Float, x2: Float, y2: Float): Double {

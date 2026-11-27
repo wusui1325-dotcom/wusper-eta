@@ -4,10 +4,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,19 +69,17 @@ fun MapPane(model: AppModel) {
 
 @Composable
 private fun RowBar(model: AppModel, help: Help?) {
-    androidx.compose.foundation.layout.Row(
-        Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+    Row(
+        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Glyph(Glyphs.map, null, Ink.black, 18.dp)
-        androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 8.dp))
-        androidx.compose.foundation.text.BasicText(stringResource(R.string.tab_map), style = Ink.title)
-        if (help != null) {
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 6.dp))
-            HelpMark { model.help = help }
+        SectionHead(Glyphs.map, stringResource(R.string.tab_map), help) { model.help = it }
+        Spacer(Modifier.weight(1f))
+        InkButton(Glyphs.close, stringResource(R.string.cd_close), label = stringResource(R.string.cd_close)) {
+            model.closeMap()
         }
     }
-    Rule()
+    Hair()
 }
 
 @Composable
@@ -119,20 +121,22 @@ private fun Schematic(model: AppModel) {
             plots.forEach { plot ->
                 val at = project(plots, plot.lat, plot.lng, w, h, scale, pan)
                 when (plot.kind) {
-                    1 -> drawCircle(Ink.black, 7f, at, style = Stroke(width = 2f))
+                    1 -> drawCircle(Ink.black, 7f, at, style = Stroke(width = 2.2f))
                     2 -> {
-                        drawLine(Ink.black, at.copy(x = at.x - 10f), at.copy(x = at.x + 10f), 2f)
-                        drawLine(Ink.black, at.copy(y = at.y - 10f), at.copy(y = at.y + 10f), 2f)
+                        drawCircle(Ink.black, 5f, at)
+                        drawCircle(Ink.black, 12f, at, style = Stroke(width = 1.6f))
                     }
-                    else -> drawRect(Ink.black, at.copy(x = at.x - 6f, y = at.y - 6f), androidx.compose.ui.geometry.Size(12f, 12f), style = Stroke(width = 2f))
+                    else -> drawCircle(Ink.black, 5f, at, style = Stroke(width = 2f))
                 }
             }
         }
-        Column(Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
             InkButton(Glyphs.zoomIn, stringResource(R.string.cd_zoom_in), label = stringResource(R.string.cd_zoom_in)) { scale = (scale * 1.25f).coerceAtMost(6f) }
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(3.dp))
             InkButton(Glyphs.zoomOut, stringResource(R.string.cd_zoom_out), label = stringResource(R.string.cd_zoom_out)) { scale = (scale / 1.25f).coerceAtLeast(0.6f) }
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(3.dp))
             InkButton(Glyphs.center, stringResource(R.string.cd_center), label = stringResource(R.string.cd_center)) {
                 scale = 1f
                 pan = Offset.Zero
@@ -160,7 +164,7 @@ private fun project(plots: List<Plot>, lat: Double, lng: Double, w: Float, h: Fl
 
 private fun hitTest(plots: List<Plot>, tap: Offset, w: Float, h: Float, scale: Float, pan: Offset): String? {
     var best: String? = null
-    var bestD = 36f * 36f
+    var bestD = 40f * 40f
     plots.forEach { plot ->
         val at = project(plots, plot.lat, plot.lng, w, h, scale, pan)
         val dx = at.x - tap.x

@@ -5,8 +5,11 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.os.Bundle
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -19,13 +22,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,6 +39,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -41,9 +49,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -69,11 +78,21 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
     var showCodes by remember(focus.favId) { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    BoxWithConstraints(modifier.fillMaxSize()) {
-        val header = maxHeight * 0.05f
-        val tools = maxHeight * 0.10f
-        val map = maxHeight * 0.35f
-        val list = maxHeight - header - tools - map
+    val focusIcon = when (focus) {
+        is RouteFocus.Mtr -> Glyphs.mtr
+        is RouteFocus.Bus -> when (focus.route.co) {
+            "KMB" -> Glyphs.kmb
+            "CTB" -> Glyphs.ctb
+            "GMB" -> Glyphs.gmb
+            "LRT" -> Glyphs.lightRail
+            else -> Glyphs.bus
+        }
+    }
+    BoxWithConstraints(modifier.fillMaxSize().background(Ink.paper)) {
+        val header = (maxHeight * 0.07f).coerceAtLeast(52.dp)
+        val tools = (maxHeight * 0.10f).coerceAtLeast(62.dp)
+        val map = maxHeight * 0.34f
+        val list = (maxHeight - header - tools - map).coerceAtLeast(120.dp)
         fun jump(index: Int) {
             if (model.detailStops.isEmpty()) return
             val at = index.coerceIn(0, model.detailStops.lastIndex)
@@ -86,7 +105,7 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                 Modifier
                     .fillMaxWidth()
                     .height(header)
-                    .padding(horizontal = 8.dp),
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 InkButton(Glyphs.back, stringResource(R.string.label_back), label = stringResource(R.string.label_back)) {
@@ -94,9 +113,19 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                 }
                 val nearestFare = nearestStop(model.detailStops, model.lat, model.lng)?.let { boardingFare(model.detailFares[it.id]) }
                 Row(
-                    Modifier.weight(1f).padding(horizontal = 8.dp),
+                    Modifier.weight(1f).padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    Box(
+                        Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(Ink.black),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Glyph(focusIcon, null, Ink.paper, 14.dp)
+                    }
+                    Spacer(Modifier.width(8.dp))
                     BasicText(
                         when (focus) {
                             is RouteFocus.Bus -> focus.route.route
@@ -109,15 +138,17 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                     )
                     if (nearestFare != null) {
                         Spacer(Modifier.width(8.dp))
-                        BasicText(nearestFare, style = Ink.detailMeta, maxLines = 1)
+                        StreamlinedPill(nearestFare, icon = Glyphs.fare)
                     }
                 }
                 InkButton(
                     if (saved) Glyphs.favOn else Glyphs.saved,
                     stringResource(if (saved) R.string.cd_fav_on else R.string.cd_fav_off),
+                    selected = saved,
                     label = stringResource(if (saved) R.string.label_saved else R.string.cd_fav_off),
                 ) { model.toggleRouteFav() }
             }
+            Hair()
             RouteStopMap(
                 model.detailStops,
                 hereLat = model.lat,
@@ -128,22 +159,27 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                 },
                 modifier = Modifier.fillMaxWidth().height(map),
             )
+            Hair()
             Box(Modifier.fillMaxWidth().height(list)) {
                 if (model.detailReady && model.detailStops.isEmpty()) {
-                    FailLine { model.openDetail(focus) }
+                    Box(Modifier.padding(horizontal = 20.dp)) {
+                        FailLine { model.openDetail(focus) }
+                    }
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 28.dp),
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
                     ) {
-                        items(
+                        itemsIndexed(
                             model.detailStops,
-                            key = { "${it.seq}-${it.id}" },
-                            contentType = { "stop" },
-                        ) { stop ->
+                            key = { _, stop -> "${stop.seq}-${stop.id}" },
+                            contentType = { _, _ -> "stop" },
+                        ) { index, stop ->
                             val open = expanded[stop.id] == true
                             StopEtaRow(
                                 stop = stop,
+                                isFirst = index == 0,
+                                isLast = index == model.detailStops.lastIndex,
                                 next = model.detailNext[stop.id],
                                 times = model.detailTimes[stop.id].orEmpty(),
                                 transfers = model.detailTransfers[stop.id],
@@ -160,8 +196,9 @@ fun RouteDetailPane(model: AppModel, modifier: Modifier = Modifier) {
                     }
                 }
             }
+            Hair()
             DetailTools(
-                Modifier.fillMaxWidth().height(tools),
+                Modifier.fillMaxWidth().height(tools).background(Ink.bar).padding(horizontal = 8.dp, vertical = 6.dp),
                 codesOn = showCodes,
                 onFlip = { model.switchDetailDirection() },
                 onTop = { jump(0) },
@@ -192,7 +229,7 @@ private fun DetailTools(
     onNear: () -> Unit,
     onCodes: () -> Unit,
 ) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         ToolAction(Glyphs.bothWays, stringResource(R.string.tool_flip), false, Modifier.weight(1f), onFlip)
         ToolAction(Glyphs.toTop, stringResource(R.string.tool_top), false, Modifier.weight(1f), onTop)
         ToolAction(Glyphs.toBottom, stringResource(R.string.tool_end), false, Modifier.weight(1f), onEnd)
@@ -210,21 +247,25 @@ private fun ToolAction(
     onClick: () -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
-    val fg = if (selected) Ink.paper else Ink.black
+    val pressed by source.collectIsPressedAsState()
+    val on = selected || pressed
+    val fg = if (on) Ink.paper else Ink.black
+    val shape = RoundedCornerShape(16.dp)
     Column(
         modifier
             .fillMaxSize()
-            .padding(horizontal = 2.dp, vertical = 2.dp)
-            .background(if (selected) Ink.black else androidx.compose.ui.graphics.Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+            .clip(shape)
+            .background(if (on) Ink.black else Ink.wash)
+            .border(Ink.lineWidth, if (on) Ink.black else Ink.line, shape)
             .clickable(source, indication = null, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Glyph(icon, label, fg, 22.dp)
+        Glyph(icon, label, fg, 18.dp)
         Spacer(Modifier.height(2.dp))
         BasicText(
             label,
-            style = if (selected) Ink.toolLabelOn else Ink.toolLabel,
+            style = if (on) Ink.toolLabelOn else Ink.toolLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -234,6 +275,8 @@ private fun ToolAction(
 @Composable
 private fun StopEtaRow(
     stop: DetailStop,
+    isFirst: Boolean,
+    isLast: Boolean,
     next: EtaSlot?,
     times: List<EtaSlot>,
     transfers: List<String>?,
@@ -259,27 +302,55 @@ private fun StopEtaRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 14.dp),
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicText(
-                if (stop.seq > 0) stop.seq.toString() else "",
-                style = Ink.detailStop,
-                modifier = Modifier.width(36.dp),
-            )
-            Spacer(Modifier.width(8.dp))
+            Box(Modifier.width(34.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(if (open || isFirst || isLast) Ink.black else Ink.wash)
+                        .border(Ink.lineWidth, if (open || isFirst || isLast) Ink.black else Ink.line, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BasicText(
+                        if (stop.seq > 0) stop.seq.toString() else "",
+                        style = Ink.small.copy(
+                            color = if (open || isFirst || isLast) Ink.paper else Ink.black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                        ),
+                    )
+                }
+            }
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 BasicText(stop.name, style = Ink.detailStop, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (showCode) {
-                    BasicText(stop.id, style = Ink.detailMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Glyph(Glyphs.codes, null, Ink.mute, 12.dp)
+                        Spacer(Modifier.width(4.dp))
+                        BasicText(stop.id, style = Ink.detailMeta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
-            BasicText(eta, style = Ink.detailEta)
-            Spacer(Modifier.width(12.dp))
+            if (eta.isNotEmpty()) {
+                if (next?.minutes == null) {
+                    StreamlinedPill(eta)
+                } else {
+                    BasicText(eta, style = Ink.detailEta)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
             val source = remember(stop.id) { MutableInteractionSource() }
             Box(
                 Modifier
-                    .size(36.dp)
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(if (open) Ink.black else Ink.wash)
+                    .border(Ink.lineWidth, if (open) Ink.black else Ink.line, CircleShape)
                     .graphicsLayer { rotationZ = if (open) 180f else 0f }
                     .semantics {
                         contentDescription = more
@@ -288,35 +359,56 @@ private fun StopEtaRow(
                     .clickable(source, indication = null, onClick = onToggle),
                 contentAlignment = Alignment.Center,
             ) {
-                Glyph(Glyphs.chevron, null, Ink.black, 22.dp)
+                Glyph(Glyphs.chevron, null, if (open) Ink.paper else Ink.black, 16.dp)
             }
         }
         if (open) {
-            Column(Modifier.padding(bottom = 16.dp)) {
+            val drawerShape = RoundedCornerShape(14.dp)
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 44.dp, bottom = 12.dp)
+                    .clip(drawerShape)
+                    .background(Ink.wash)
+                    .border(Ink.lineWidth, Ink.line, drawerShape)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
                 val extra = when {
                     next == null -> ""
                     upcoming.isEmpty() -> none
-                    else -> upcoming.joinToString("    ") { "$it′" }
+                    else -> upcoming.joinToString("   ") { "$it′" }
                 }
                 if (extra.isNotEmpty()) {
-                    BasicText(extra, style = Ink.detailEta)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Glyph(Glyphs.clock, null, Ink.black, 15.dp)
+                        Spacer(Modifier.width(6.dp))
+                        BasicText(extra, style = Ink.detailEta)
+                    }
                 }
                 if (fare != null) {
-                    Spacer(Modifier.height(8.dp))
-                    BasicText(stringResource(R.string.fare_line, fare), style = Ink.detailMeta)
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Glyph(Glyphs.fare, null, Ink.mute, 14.dp)
+                        Spacer(Modifier.width(6.dp))
+                        BasicText(stringResource(R.string.fare_line, fare), style = Ink.detailMeta)
+                    }
                 }
                 if (!transfers.isNullOrEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    BasicText(
-                        transfers.joinToString("    "),
-                        style = Ink.detailMeta,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.Top) {
+                        Glyph(Glyphs.transfer, null, Ink.mute, 14.dp)
+                        Spacer(Modifier.width(6.dp))
+                        BasicText(
+                            transfers.joinToString("   "),
+                            style = Ink.detailMeta,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
-        Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
+        Hair()
     }
 }
 
@@ -421,27 +513,27 @@ private fun placeStops(
 }
 
 private fun numberedMarker(order: Int) = BitmapDescriptorFactory.fromBitmap(
-    Bitmap.createBitmap(168, 168, Bitmap.Config.ARGB_8888).also { bitmap ->
+    Bitmap.createBitmap(148, 148, Bitmap.Config.ARGB_8888).also { bitmap ->
         val canvas = Canvas(bitmap)
         val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.BLACK
+            color = android.graphics.Color.rgb(11, 11, 12)
             style = Paint.Style.FILL
         }
         val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
             style = Paint.Style.STROKE
-            strokeWidth = 14f
+            strokeWidth = 10f
         }
-        canvas.drawCircle(84f, 84f, 70f, fill)
-        canvas.drawCircle(84f, 84f, 52f, ring)
+        canvas.drawCircle(74f, 74f, 60f, fill)
+        canvas.drawCircle(74f, 74f, 54f, ring)
         val label = if (order > 0) order.toString() else ""
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = android.graphics.Color.WHITE
             textAlign = Paint.Align.CENTER
-            textSize = if (label.length >= 3) 48f else 64f
+            textSize = if (label.length >= 3) 42f else 54f
             isFakeBoldText = true
         }
-        val baseline = 84f - (text.descent() + text.ascent()) / 2f
-        canvas.drawText(label, 84f, baseline, text)
+        val baseline = 74f - (text.descent() + text.ascent()) / 2f
+        canvas.drawText(label, 74f, baseline, text)
     },
 )

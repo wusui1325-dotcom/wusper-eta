@@ -1,6 +1,7 @@
 package com.wusper.eta.ui
 
 import android.Manifest
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,36 +20,36 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -56,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import com.wusper.eta.R
 import com.wusper.eta.data.AppModel
 import com.wusper.eta.data.Tab
@@ -76,6 +78,13 @@ fun Root(model: AppModel) {
     val dark = isSystemInDarkTheme()
     if (Ink.night != dark) Ink.night = dark
     val context = LocalContext.current
+    SideEffect {
+        val window = (context as? Activity)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) model.locateGranted()
     }
@@ -127,32 +136,47 @@ fun Root(model: AppModel) {
 
 @Composable
 private fun TopBar(model: AppModel) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 28.dp, end = 12.dp, top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BasicText("Wusper ETA", style = Ink.title)
-        InkButton(
-            Glyphs.all,
-            stringResource(R.string.widget_add),
-            selected = model.widgetSizes,
-            label = stringResource(R.string.widget_add),
-        ) { model.widgetSizes = !model.widgetSizes }
-        if (!com.wusper.eta.widget.EtaWidgets.pinSupported(LocalContext.current)) {
-            HelpMark { model.help = com.wusper.eta.data.Help.WidgetPin }
-        }
-        Spacer(Modifier.weight(1f))
-        if (model.showSettings) {
-            InkButton(Glyphs.close, stringResource(R.string.cd_close), label = stringResource(R.string.cd_close)) {
-                model.closeSettings()
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(Ink.black),
+                contentAlignment = Alignment.Center,
+            ) {
+                Glyph(Glyphs.bus, null, Ink.paper, 16.dp)
             }
-        } else {
-            InkButton(Glyphs.settings, stringResource(R.string.settings), label = stringResource(R.string.settings)) {
-                model.openSettings()
+            Spacer(Modifier.width(8.dp))
+            BasicText("Wusper ETA", style = Ink.title)
+            Spacer(Modifier.weight(1f))
+            InkButton(
+                Glyphs.widget,
+                stringResource(R.string.widget_add),
+                selected = model.widgetSizes,
+                label = stringResource(R.string.widget_add),
+            ) { model.widgetSizes = !model.widgetSizes }
+            if (!com.wusper.eta.widget.EtaWidgets.pinSupported(LocalContext.current)) {
+                Spacer(Modifier.width(4.dp))
+                HelpMark { model.help = com.wusper.eta.data.Help.WidgetPin }
+            }
+            Spacer(Modifier.width(6.dp))
+            if (model.showSettings) {
+                InkButton(Glyphs.close, stringResource(R.string.cd_close), label = stringResource(R.string.cd_close)) {
+                    model.closeSettings()
+                }
+            } else {
+                InkButton(Glyphs.settings, stringResource(R.string.settings), label = stringResource(R.string.settings)) {
+                    model.openSettings()
+                }
             }
         }
+        Hair()
     }
 }
 
@@ -166,12 +190,12 @@ private fun SectionBody(model: AppModel) {
             } else {
                 val forward = targetState.ordinal >= initialState.ordinal
                 val glide = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-                val travel = 56
-                (fadeIn(tween(320, easing = FastOutSlowInEasing)) +
-                    slideInHorizontally(tween(420, easing = glide)) { if (forward) travel else -travel })
+                val travel = 48
+                (fadeIn(tween(260, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(tween(340, easing = glide)) { if (forward) travel else -travel })
                     .togetherWith(
-                        fadeOut(tween(220, easing = FastOutSlowInEasing)) +
-                            slideOutHorizontally(tween(320, easing = glide)) { if (forward) -travel / 2 else travel / 2 },
+                        fadeOut(tween(180, easing = FastOutSlowInEasing)) +
+                            slideOutHorizontally(tween(260, easing = glide)) { if (forward) -travel / 2 else travel / 2 },
                     )
             }
         },
@@ -188,8 +212,8 @@ private fun SectionBody(model: AppModel) {
 }
 
 private val capsuleSpring = spring<Float>(
-    dampingRatio = 0.92f,
-    stiffness = Spring.StiffnessLow,
+    dampingRatio = 0.88f,
+    stiffness = Spring.StiffnessMediumLow,
     visibilityThreshold = 0.001f,
 )
 
@@ -204,33 +228,28 @@ private fun CapsuleBar(tab: Tab, onSelect: (Tab) -> Unit) {
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 16.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 14.dp),
     ) {
         val barWidth = if (maxWidth > 720.dp) 640.dp else maxWidth
         val itemWidth = barWidth / capsuleItems.size
-        val shape = RoundedCornerShape(36.dp)
-        val shadow = if (Ink.night) Color.White else Color.Black
+        val outerShape = RoundedCornerShape(999.dp)
+        val innerShape = RoundedCornerShape(999.dp)
         Box(
             Modifier
                 .width(barWidth)
-                .height(72.dp)
+                .height(68.dp)
                 .align(Alignment.Center)
-                .shadow(
-                    elevation = 18.dp,
-                    shape = shape,
-                    ambientColor = shadow.copy(alpha = if (Ink.night) 0.55f else 0.28f),
-                    spotColor = shadow.copy(alpha = if (Ink.night) 0.35f else 0.42f),
-                )
-                .clip(shape)
-                .background(Ink.bar),
+                .clip(outerShape)
+                .background(Ink.bar)
+                .border(Ink.lineWidth, Ink.line, outerShape),
         ) {
             val density = LocalDensity.current
             val inset = 5.dp
             val pillWidth = itemWidth - inset * 2
-            val pillHeight = 62.dp
+            val pillHeight = 58.dp
             val step = with(density) { itemWidth.toPx() }
             val insetPx = with(density) { inset.toPx() }
-            val topPx = with(density) { ((72.dp - pillHeight) / 2).toPx() }
+            val topPx = with(density) { ((68.dp - pillHeight) / 2).toPx() }
             Box(
                 Modifier
                     .graphicsLayer {
@@ -239,7 +258,8 @@ private fun CapsuleBar(tab: Tab, onSelect: (Tab) -> Unit) {
                     }
                     .width(pillWidth)
                     .height(pillHeight)
-                    .background(Ink.barInk, RoundedCornerShape(31.dp)),
+                    .clip(innerShape)
+                    .background(Ink.barInk),
             )
             Row(Modifier.fillMaxSize()) {
                 capsuleItems.forEachIndexed { i, item ->
@@ -252,9 +272,10 @@ private fun CapsuleBar(tab: Tab, onSelect: (Tab) -> Unit) {
                             .fillMaxHeight()
                             .clickable(source, indication = null) { onSelect(item.tab) },
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                        verticalArrangement = Arrangement.Center,
                     ) {
-                        Glyph(item.icon, stringResource(item.label), color, 20.dp)
+                        Glyph(item.icon, stringResource(item.label), color, 19.dp)
+                        Spacer(Modifier.height(2.dp))
                         BasicText(
                             stringResource(item.label),
                             style = Ink.small.copy(color = color),

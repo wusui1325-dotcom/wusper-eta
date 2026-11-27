@@ -2,6 +2,8 @@ package com.wusper.eta.ui
 
 import android.app.Activity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -24,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,13 +51,20 @@ import kotlinx.coroutines.withContext
 fun WidgetSizeRow(onDone: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
-    Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        listOf("1x1" to R.string.widget_1x1, "2x1" to R.string.widget_2x1, "2x2" to R.string.widget_2x2).forEach { (size, label) ->
-            InkButton(Glyphs.all, stringResource(label), label = stringResource(label)) {
-                if (activity != null) EtaWidgets.pin(activity, size)
-                onDone()
+    Column(Modifier.fillMaxWidth().background(Ink.paper)) {
+        Row(
+            Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listOf("1x1" to R.string.widget_1x1, "2x1" to R.string.widget_2x1, "2x2" to R.string.widget_2x2).forEach { (size, label) ->
+                InkButton(Glyphs.widget, stringResource(label), label = stringResource(label)) {
+                    if (activity != null) EtaWidgets.pin(activity, size)
+                    onDone()
+                }
             }
         }
+        Hair()
     }
 }
 
@@ -73,15 +84,16 @@ fun WidgetAdminPane(model: AppModel) {
                 .widthIn(max = 640.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 20.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 InkButton(Glyphs.back, stringResource(R.string.label_back), label = stringResource(R.string.label_back)) {
                     model.widgetPage = false
                 }
-                BasicText(stringResource(R.string.widget_section), style = Ink.title)
+                Spacer(Modifier.width(10.dp))
+                SectionHead(Glyphs.widget, stringResource(R.string.widget_section))
             }
-            Spacer(Modifier.height(12.dp))
             placed.forEach { item ->
                 val choice = WidgetPrefs.choice(context, item.id)
                 val sizeLabel = when (item.size) {
@@ -90,9 +102,19 @@ fun WidgetAdminPane(model: AppModel) {
                     else -> stringResource(R.string.widget_1x1)
                 }
                 val slots = if (item.size == "2x2") listOf(0, 1) else listOf(0)
-                Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                    BasicText(sizeLabel, style = Ink.meta)
-                    slots.forEach { slot ->
+                val cardShape = RoundedCornerShape(18.dp)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(cardShape)
+                        .background(Ink.wash)
+                        .border(Ink.lineWidth, Ink.line, cardShape)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    StreamlinedPill(sizeLabel, icon = Glyphs.widget, inverted = true)
+                    slots.forEachIndexed { idx, slot ->
+                        if (idx > 0) Hair()
                         val manual = if (slot == 0) choice.manual else choice.manualB
                         val picked = if (slot == 0) choice.route else choice.routeB
                         val stopName = if (slot == 0) choice.stopName else choice.stopNameB
@@ -103,7 +125,6 @@ fun WidgetAdminPane(model: AppModel) {
                         }
                         val key = "${item.id}:$slot"
                         if (item.size == "2x2") {
-                            Spacer(Modifier.height(8.dp))
                             BasicText(
                                 stringResource(if (slot == 0) R.string.widget_upper else R.string.widget_lower),
                                 style = Ink.meta,
@@ -123,77 +144,84 @@ fun WidgetAdminPane(model: AppModel) {
                                 HelpMark { model.help = Help.WidgetAuto }
                             }
                         }
-                        BasicText(
-                            stopName.ifBlank { stringResource(R.string.widget_nearest) },
-                            style = Ink.body,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        InkButton(Glyphs.routeCol, stringResource(R.string.col_route), label = stringResource(R.string.col_route)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Glyph(Glyphs.stopPole, null, Ink.mute, 14.dp)
+                            Spacer(Modifier.width(6.dp))
+                            BasicText(
+                                stopName.ifBlank { stringResource(R.string.widget_nearest) },
+                                style = Ink.body,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        InkButton(Glyphs.routeCol, stringResource(R.string.col_route), selected = openKey == key, label = stringResource(R.string.col_route)) {
                             openKey = if (openKey == key) "" else key
                             stops = emptyList()
                         }
                         if (openKey == key) {
-                            InkButton(Glyphs.all, stringResource(R.string.widget_auto), label = stringResource(R.string.widget_auto)) {
-                                writeSlot(context, item.id, slot, manual = false, route = null, stopId = "", stopName = "")
-                                refresh(context, item.id, item.size, item.cls)
-                                revision += 1
-                            }
-                            options(favorites, usage).forEach { candidate ->
-                                InkButton(
-                                    Glyphs.routeCol,
-                                    candidate.title.ifBlank { candidate.route.ifBlank { candidate.line } },
-                                    label = candidate.title.ifBlank { candidate.route.ifBlank { candidate.line } },
-                                ) {
-                                    writeSlot(context, item.id, slot, manual = true, route = candidate, stopId = "", stopName = "")
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                StreamlinedRowButton(Glyphs.all, stringResource(R.string.widget_auto), selected = !manual, trailing = null) {
+                                    writeSlot(context, item.id, slot, manual = false, route = null, stopId = "", stopName = "")
                                     refresh(context, item.id, item.size, item.cls)
                                     revision += 1
                                 }
-                            }
-                            InkButton(Glyphs.stopPole, stringResource(R.string.widget_nearest), label = stringResource(R.string.widget_nearest)) {
-                                val current = WidgetPrefs.choice(context, item.id)
-                                writeSlot(
-                                    context,
-                                    item.id,
-                                    slot,
-                                    manual = if (slot == 0) current.manual else current.manualB,
-                                    route = if (slot == 0) current.route else current.routeB,
-                                    stopId = "",
-                                    stopName = "",
-                                )
-                                refresh(context, item.id, item.size, item.cls)
-                                revision += 1
-                            }
-                            if (route != null) {
-                                InkButton(Glyphs.stopPole, stringResource(R.string.sec_stops), label = stringResource(R.string.sec_stops)) {
-                                    scope.launch {
-                                        val loaded = withContext(Dispatchers.IO) { loadStops(context, route) }
-                                        if (openKey == key) stops = loaded
-                                    }
-                                }
-                                stops.forEach { (stopId, name) ->
-                                    InkButton(Glyphs.stopPole, name, label = name) {
-                                        val current = WidgetPrefs.choice(context, item.id)
-                                        writeSlot(
-                                            context,
-                                            item.id,
-                                            slot,
-                                            manual = if (slot == 0) current.manual else current.manualB,
-                                            route = if (slot == 0) current.route else current.routeB,
-                                            stopId = stopId,
-                                            stopName = name,
-                                        )
+                                options(favorites, usage).forEach { candidate ->
+                                    val label = candidate.title.ifBlank { candidate.route.ifBlank { candidate.line } }
+                                    StreamlinedRowButton(
+                                        icon = if (candidate.line.isNotBlank()) Glyphs.mtr else Glyphs.routeCol,
+                                        label = label,
+                                        selected = manual && picked?.id == candidate.id,
+                                        trailing = null,
+                                    ) {
+                                        writeSlot(context, item.id, slot, manual = true, route = candidate, stopId = "", stopName = "")
                                         refresh(context, item.id, item.size, item.cls)
                                         revision += 1
+                                    }
+                                }
+                                StreamlinedRowButton(Glyphs.locate, stringResource(R.string.widget_nearest), trailing = null) {
+                                    val current = WidgetPrefs.choice(context, item.id)
+                                    writeSlot(
+                                        context,
+                                        item.id,
+                                        slot,
+                                        manual = if (slot == 0) current.manual else current.manualB,
+                                        route = if (slot == 0) current.route else current.routeB,
+                                        stopId = "",
+                                        stopName = "",
+                                    )
+                                    refresh(context, item.id, item.size, item.cls)
+                                    revision += 1
+                                }
+                                if (route != null) {
+                                    InkButton(Glyphs.stopPole, stringResource(R.string.sec_stops), label = stringResource(R.string.sec_stops)) {
+                                        scope.launch {
+                                            val loaded = withContext(Dispatchers.IO) { loadStops(context, route) }
+                                            if (openKey == key) stops = loaded
+                                        }
+                                    }
+                                    stops.forEach { (stopId, name) ->
+                                        StreamlinedRowButton(Glyphs.stopPole, name, trailing = null) {
+                                            val current = WidgetPrefs.choice(context, item.id)
+                                            writeSlot(
+                                                context,
+                                                item.id,
+                                                slot,
+                                                manual = if (slot == 0) current.manual else current.manualB,
+                                                route = if (slot == 0) current.route else current.routeB,
+                                                stopId = stopId,
+                                                stopName = name,
+                                            )
+                                            refresh(context, item.id, item.size, item.cls)
+                                            revision += 1
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
                 }
             }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

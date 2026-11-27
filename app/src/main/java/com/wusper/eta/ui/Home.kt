@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,23 +17,25 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +63,7 @@ private data class Arrival(
     val flip: Flip?,
     val focus: RouteFocus?,
     val meters: Int,
+    val icon: ImageVector,
     val live: Live = Live.None,
     val boardKey: String? = null,
 )
@@ -66,6 +71,15 @@ private data class Arrival(
 private sealed class Flip {
     data class Bus(val route: Route) : Flip()
     data class Mtr(val sta: String, val line: String) : Flip()
+}
+
+private fun modeIcon(co: String): ImageVector = when (co) {
+    "KMB" -> Glyphs.kmb
+    "CTB" -> Glyphs.ctb
+    "GMB" -> Glyphs.gmb
+    "LRT" -> Glyphs.lightRail
+    "MTR" -> Glyphs.mtr
+    else -> Glyphs.bus
 }
 
 @Composable
@@ -88,6 +102,7 @@ fun FavoriteRoutes(model: AppModel) {
                     RouteFocus.Bus(fav.asRoute())
                 },
                 meters = 0,
+                icon = if (fav.line.isNotBlank()) Glyphs.mtr else modeIcon(fav.co),
                 live = Live.Fav,
             )
         }.byLiveEtaThenDistance()
@@ -131,17 +146,20 @@ fun MtrHome(model: AppModel) {
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             Row(
-                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(start = 20.dp, end = 28.dp, top = 8.dp),
+                Modifier
+                    .widthIn(max = 640.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 InkButton(Glyphs.map, stringResource(R.string.rail_pair), label = stringResource(R.string.rail_pair)) {
                     model.openLocalMap()
                 }
-                Spacer(Modifier.width(4.dp))
-                InkButton(Glyphs.all, stringResource(R.string.rail_nation), label = stringResource(R.string.rail_nation)) {
+                Spacer(Modifier.width(8.dp))
+                InkButton(Glyphs.globe, stringResource(R.string.rail_nation), label = stringResource(R.string.rail_nation)) {
                     model.openNation()
                 }
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.weight(1f))
                 HelpMark { model.help = Help.MtrGeo }
             }
         }
@@ -231,6 +249,7 @@ private fun busArrivals(
                 flip = Flip.Bus(route),
                 focus = RouteFocus.Bus(hit?.asRoute() ?: route),
                 meters = meters,
+                icon = modeIcon(route.co),
                 live = if (hit == null) Live.Bus else Live.None,
             )
         }
@@ -265,6 +284,7 @@ private fun mtrArrivals(
                     flip = null,
                     focus = null,
                     meters = meters,
+                    icon = Glyphs.mtr,
                 ),
             )
         } else {
@@ -299,6 +319,7 @@ private fun mtrLine(sta: String, stop: String, line: MtrLine, sides: Map<String,
         flip = Flip.Mtr(sta, line.code),
         focus = RouteFocus.Mtr(line.code, line.name, side),
         meters = meters,
+        icon = Glyphs.mtr,
         boardKey = "$sta|${line.code}",
     )
 }
@@ -314,10 +335,11 @@ private fun ArrivalColumn(content: androidx.compose.foundation.lazy.LazyListScop
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             state = androidx.compose.foundation.lazy.rememberLazyListState(),
+            contentPadding = PaddingValues(bottom = 12.dp),
             modifier = Modifier
                 .widthIn(max = 640.dp)
                 .fillMaxSize()
-                .padding(horizontal = 28.dp),
+                .padding(horizontal = 20.dp),
             content = content,
         )
     }
@@ -325,13 +347,15 @@ private fun ArrivalColumn(content: androidx.compose.foundation.lazy.LazyListScop
 
 @Composable
 private fun QuietHead(onHelp: (Help) -> Unit) {
-    Column(Modifier.padding(top = 12.dp, bottom = 8.dp)) {
-        Spacer(Modifier.height(8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BasicText(stringResource(R.string.tab_nearby), style = Ink.meta)
-            Spacer(Modifier.width(6.dp))
-            HelpMark { onHelp(Help.Nearby) }
-        }
+    Row(
+        Modifier.padding(top = 12.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Glyph(Glyphs.nearby, null, Ink.mute, 15.dp)
+        Spacer(Modifier.width(6.dp))
+        BasicText(stringResource(R.string.tab_nearby), style = Ink.meta)
+        Spacer(Modifier.width(6.dp))
+        HelpMark { onHelp(Help.Nearby) }
     }
 }
 
@@ -339,22 +363,42 @@ private fun QuietHead(onHelp: (Help) -> Unit) {
 private fun ArrivalLine(row: Arrival, onHelp: (Help) -> Unit, onFlip: (Flip) -> Unit, onOpen: () -> Unit) {
     val bound = if (row.dest.isBlank()) "" else stringResource(R.string.bound_to, row.dest)
     val open = remember { MutableInteractionSource() }
+    val pressed by open.collectIsPressedAsState()
+    val cardShape = RoundedCornerShape(18.dp)
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(open, indication = null, onClick = onOpen),
+            .padding(vertical = 4.dp)
+            .clip(cardShape)
+            .background(if (pressed) Ink.surface else Ink.wash)
+            .border(Ink.lineWidth, Ink.line, cardShape)
+            .clickable(open, indication = null, onClick = onOpen)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    BasicText(row.route, style = Ink.arrivalRoute, maxLines = 1, softWrap = false)
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Ink.black)
+                            .padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Glyph(row.icon, null, Ink.paper, 14.dp)
+                        Spacer(Modifier.width(5.dp))
+                        BasicText(
+                            row.route,
+                            style = Ink.route.copy(color = Ink.paper, fontSize = (17f * Ink.textScale).sp),
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
                     if (bound.isNotEmpty()) {
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(8.dp))
                         BasicText(
                             bound,
                             style = Ink.arrivalBound,
@@ -370,8 +414,10 @@ private fun ArrivalLine(row: Arrival, onHelp: (Help) -> Unit, onFlip: (Flip) -> 
                         BoundButton { onFlip(row.flip) }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(7.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Glyph(Glyphs.stopPole, null, Ink.mute, 13.dp)
+                    Spacer(Modifier.width(5.dp))
                     BasicText(
                         row.stop,
                         style = Ink.arrivalStop,
@@ -385,27 +431,26 @@ private fun ArrivalLine(row: Arrival, onHelp: (Help) -> Unit, onFlip: (Flip) -> 
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(10.dp))
             MinuteCluster(row.state, row.etas, onHelp)
         }
-        Box(Modifier.fillMaxWidth().height(Ink.lineWidth).background(Ink.line))
     }
 }
 
 @Composable
 private fun BoundButton(onClick: () -> Unit) {
     val cd = stringResource(R.string.cd_flip)
-    val diameter = with(LocalDensity.current) { (32f * Ink.textScale).sp.toDp() }
+    val diameter = with(LocalDensity.current) { (30f * Ink.textScale).sp.toDp() }
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val fill = if (pressed) Ink.black else androidx.compose.ui.graphics.Color.Transparent
+    val fill = if (pressed) Ink.black else Ink.paper
     val glyph = if (pressed) Ink.paper else Ink.black
     Box(
         Modifier
             .size(diameter)
             .clip(CircleShape)
             .background(fill)
-            .border(Ink.lineWidth, Ink.black, CircleShape)
+            .border(Ink.lineWidth, if (pressed) Ink.black else Ink.line, CircleShape)
             .semantics {
                 contentDescription = cd
                 role = Role.Button
@@ -413,7 +458,7 @@ private fun BoundButton(onClick: () -> Unit) {
             .clickable(interactionSource = source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Glyph(Glyphs.bothWays, null, glyph, diameter * 0.46f)
+        Glyph(Glyphs.bothWays, null, glyph, diameter * 0.52f)
     }
 }
 
@@ -435,7 +480,11 @@ private fun MinuteCluster(state: EtaState, etas: List<EtaSlot>, onHelp: (Help) -
 @Composable
 private fun EtaText(text: String, scheduled: Boolean, none: Boolean, onHelp: (Help) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        BasicText(text, style = Ink.arrivalEta)
+        if (none) {
+            StreamlinedPill(text)
+        } else if (text.isNotEmpty()) {
+            BasicText(text, style = Ink.arrivalEta.copy(fontWeight = FontWeight.Bold))
+        }
         if (scheduled || none) {
             Spacer(Modifier.width(4.dp))
             HelpMark { onHelp(if (none) Help.None else Help.Scheduled) }
@@ -445,9 +494,20 @@ private fun EtaText(text: String, scheduled: Boolean, none: Boolean, onHelp: (He
 
 @Composable
 internal fun FailLine(onRetry: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 12.dp)) {
-        BasicText(stringResource(R.string.fail), style = Ink.body)
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .clip(shape)
+            .background(Ink.wash)
+            .border(Ink.lineWidth, Ink.line, shape)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Glyph(Glyphs.info, null, Ink.black, 16.dp)
+        Spacer(Modifier.width(8.dp))
+        BasicText(stringResource(R.string.fail), style = Ink.body, modifier = Modifier.weight(1f))
         InkButton(Glyphs.retry, stringResource(R.string.cd_retry), label = stringResource(R.string.label_retry), onClick = onRetry)
     }
 }
-

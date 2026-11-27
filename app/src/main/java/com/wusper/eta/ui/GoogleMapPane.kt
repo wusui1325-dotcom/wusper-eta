@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.os.Bundle
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -65,15 +66,17 @@ fun GoogleMapPane(model: AppModel) {
     }
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
-        Column(Modifier.align(Alignment.BottomEnd).padding(8.dp)) {
+        Column(
+            Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
             InkButton(Glyphs.zoomIn, stringResource(R.string.cd_zoom_in), label = stringResource(R.string.cd_zoom_in)) {
                 map?.animateCamera(CameraUpdateFactory.zoomIn())
             }
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(3.dp))
             InkButton(Glyphs.zoomOut, stringResource(R.string.cd_zoom_out), label = stringResource(R.string.cd_zoom_out)) {
                 map?.animateCamera(CameraUpdateFactory.zoomOut())
             }
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(3.dp))
             InkButton(Glyphs.center, stringResource(R.string.cd_center), label = stringResource(R.string.cd_center)) {
                 map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(model.lat, model.lng), 16f))
             }
@@ -102,17 +105,23 @@ fun GoogleMapPane(model: AppModel) {
 }
 
 private fun marker(filled: Boolean) = BitmapDescriptorFactory.fromBitmap(
-    Bitmap.createBitmap(28, 28, Bitmap.Config.ARGB_8888).also { bitmap ->
+    Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888).also { bitmap ->
         val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.BLACK
-            style = if (filled) Paint.Style.STROKE else Paint.Style.STROKE
-            strokeWidth = 3f
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (filled) android.graphics.Color.rgb(11, 11, 12) else android.graphics.Color.WHITE
+            style = Paint.Style.FILL
+        }
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(11, 11, 12)
+            style = Paint.Style.STROKE
+            strokeWidth = 3.2f
         }
         if (filled) {
-            canvas.drawCircle(14f, 14f, 8f, paint)
+            canvas.drawCircle(16f, 16f, 10f, bg)
+            canvas.drawCircle(16f, 16f, 8.5f, stroke.apply { color = android.graphics.Color.WHITE })
         } else {
-            canvas.drawRect(6f, 6f, 22f, 22f, paint)
+            canvas.drawCircle(16f, 16f, 9f, bg)
+            canvas.drawCircle(16f, 16f, 9f, stroke)
         }
     },
 )
